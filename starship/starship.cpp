@@ -87,24 +87,37 @@ void main() {
 }
 )";
 
-// Vertex Shader
 const char* cannonVertexShader = R"(#version 300 es
+precision highp float;
+
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aTexCoord;
 
-uniform mat4 uCannonTransform;
+const int MAX_CANNONS = 256;
+
+uniform vec2 uCannonPositions[MAX_CANNONS];
+uniform float uCannonAngle;
 uniform mat4 uProjection;
 uniform mat3 uShipRotation;
-
 
 out vec2 vTexCoord;
 
 void main() {
-    vec4 vertex = uCannonTransform * vec4(aPos, 0.0, 1.0);
+    vec2 pos = uCannonPositions[gl_InstanceID];
+    
+    float c = cos(uCannonAngle);
+    float s = sin(uCannonAngle);
+    
+    vec2 rotated = vec2(
+        aPos.x * c - aPos.y * s,
+        aPos.x * s + aPos.y * c
+    );
+    
+    vec2 vertex = rotated + pos;
+    
+    vec3 shipRotated = uShipRotation * vec3(vertex, 0.0);
 
-    vec3 rotated = uShipRotation * vec3(vertex.x, vertex.y, vertex.z);
-
-    gl_Position = uProjection * vec4(rotated, 1.0);
+    gl_Position = uProjection * vec4(shipRotated, 1.0);
 
     vTexCoord = aTexCoord;
 }
@@ -152,7 +165,7 @@ Starship::~Starship() {
     cleanupGrid();
 }
 
-GLuint loadTexture(const char* path) {
+static GLuint loadTexture(const char* path) {
     int width, height, channels;
     unsigned char* data = stbi_load(path, &width, &height, &channels, 4);  // force RGBA
     
@@ -178,6 +191,50 @@ GLuint loadTexture(const char* path) {
     return texture;
 }
 
+GLuint loadTextureBlurry(const char* path) {
+    int width, height, channels;
+    unsigned char* data = stbi_load(path, &width, &height, &channels, 4);  // force RGBA
+    
+    if(!data) {
+        printf("Failed to load texture: %s\n", path);
+        return 0;
+    }
+    
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+    
+    stbi_image_free(data);
+    
+    printf("Loaded texture: %s (%dx%d)\n", path, width, height);
+    return texture;
+}
+
+
+void Starship::updateCannonPositions() {
+    glm::vec2 cannonPositions[MAX_CANNONS];
+    cannonCount = 0;
+
+    for (int i = 0; i < cells.size() && cannonCount < MAX_CANNONS; ++i) {
+        if (cells[i].cellAlive) {
+            cannonPositions[cannonCount] = cells[i].middleOfTriangle;
+            cannonCount++;
+        }
+    }
+
+    glUseProgram(cannonShader);
+    glUniform2fv(uCannonPositionsLoc, cannonCount, glm::value_ptr(cannonPositions[0]));
+}
+
 void Starship::initCannons() {
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
@@ -192,28 +249,44 @@ void Starship::initCannons() {
     glDeleteShader(vs);
     glDeleteShader(fs);
 
+    // Cache uniform locations
+    uCannonPositionsLoc = glGetUniformLocation(cannonShader, "uCannonPositions");
+    uCannonAngleLoc = glGetUniformLocation(cannonShader, "uCannonAngle");
+    uShipRotationLoc = glGetUniformLocation(cannonShader, "uShipRotation");
+    uProjectionLoc = glGetUniformLocation(cannonShader, "uProjection");
+    uTextureLoc = glGetUniformLocation(cannonShader, "uTexture");
+
+    printf("uCannonPositionsLoc=%d\n", uCannonPositionsLoc);
+    printf("uCannonAngleLoc=%d\n", uCannonAngleLoc);
+    printf("uShipRotationLoc=%d\n", uShipRotationLoc);
+    printf("uProjectionLoc=%d\n", uProjectionLoc);
+    printf("uTextureLoc=%d\n", uTextureLoc);
+
+    // Set projection once
+    glUseProgram(cannonShader);
+    glUniformMatrix4fv(uProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
     struct CannonVertex {
         float x, y;
         float u, v;
     };
 
-    float pivotOffset = 0.015f;  // Adjust this to move pivot point right into the sprite
+    float pivotOffset = 0.020f;
 
-    // If texture is 64x32 (2:1 aspect ratio)
-    float texWidth = 1168.0f;
-    float texHeight = 784.0f;
-    float aspect = texWidth / texHeight;  // 2.0
+    float texWidth = 1600.0f;
+    float texHeight = 500.0f;
+    float aspect = texWidth / texHeight;
 
-    float height = 0.045f;
-    float width = height * aspect;  // 0.1
+    float height = 0.027f;
+    float width = height * aspect;
 
     CannonVertex cannonQuad[] = {
-        {-pivotOffset,       -height,  0.0f, 0.0f},
+        {-pivotOffset,        -height,  0.0f, 0.0f},
         {width - pivotOffset, -height,  1.0f, 0.0f},
         {width - pivotOffset,  height,  1.0f, 1.0f},
-        {-pivotOffset,       -height,  0.0f, 0.0f},
+        {-pivotOffset,        -height,  0.0f, 0.0f},
         {width - pivotOffset,  height,  1.0f, 1.0f},
-        {-pivotOffset,        height,  0.0f, 1.0f},
+        {-pivotOffset,         height,  0.0f, 1.0f},
     };
 
     glGenVertexArrays(1, &cannonVAO);
@@ -227,54 +300,49 @@ void Starship::initCannons() {
     glEnableVertexAttribArray(1);
     glBindVertexArray(0);
 
-    cannonTexture = loadTexture("cannon.png");
+    cannonTexture = loadTextureBlurry("cannon.png");
+
+    // Upload initial cannon positions
+    updateCannonPositions();
 }
 
-void Starship::setAspect(float aspect) {
-    this->aspect = aspect;
-}
+void Starship::renderCannons() {
+    if (cannonCount == 0) return;
 
-void Starship::renderCannons(float x, float y) {
+    printf("renderCannons\n");
+
+    // Compute cannon angle toward cursor
+    float dirX = cursorX * aspect;
+    float dirY = cursorY;
+    float cannonAngle = atan2f(dirY, dirX) - currentRotation;
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glUseProgram(cannonShader);
     glBindVertexArray(cannonVAO);
-    
+
+    // Set projection once
+    glUseProgram(cannonShader);
+    glUniformMatrix4fv(uProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, cannonTexture);
-    glUniform1i(glGetUniformLocation(cannonShader, "uTexture"), 1);
+    glUniform1i(uTextureLoc, 1);
 
-    // Angle from cannon position to cursor
-    float aspectRatio = aspect;  // e.g., 16/9 = 1.77
-    float dirX = cursorX * aspectRatio;
-    float dirY = cursorY;
-
-    float cannonAngle = atan2f(dirY, dirX);
-    float c = cosf(cannonAngle - currentRotation);
-    float s = sinf(cannonAngle - currentRotation);
-    float cannonTransform[16] = {
-        c,    s,    0.0f, 0.0f,
-       -s,    c,    0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        x,    y,    0.0f, 1.0f
-    };
-    glUniformMatrix4fv(glGetUniformLocation(cannonShader, "uCannonTransform"), 1, GL_FALSE, cannonTransform);
+    // Upload angle
+    glUniform1f(uCannonAngleLoc, cannonAngle);
 
     // Ship rotation
-    c = cosf(currentRotation);
-    s = sinf(currentRotation);
-    float rotationMatrix[9] = {
-        c,  s,  0.0f,
-       -s,  c,  0.0f,
-        0.0f, 0.0f, 1.0f
-    };
-    glUniformMatrix3fv(glGetUniformLocation(cannonShader, "uShipRotation"), 1, GL_FALSE, rotationMatrix);
+    glm::mat3 rotationMatrix = glm::mat3(glm::rotate(glm::mat4(1.0f), currentRotation, glm::vec3(0.0f, 0.0f, 1.0f)));
+    glUniformMatrix3fv(uShipRotationLoc, 1, GL_FALSE, glm::value_ptr(rotationMatrix));
 
-    glUniformMatrix4fv(glGetUniformLocation(cannonShader, "uProjection"), 1, GL_FALSE, glm::value_ptr(projection));
-
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, cannonCount);
     glBindVertexArray(0);
+}
+
+void Starship::setAspect(float aspect) {
+    this->aspect = aspect;
 }
 
 void Starship::initCellRendering() {
@@ -367,19 +435,29 @@ Starship::CellTexCoords Starship::getRandomAtlasCoords(AtlasSprite sprite, int c
     CellTexCoords coords;
     
     float spriteWidth = 1.0f / 3.0f;
-    float uL = sprite * spriteWidth;
-    float uR = uL + spriteWidth;
+
+    float offsetTop = 0.020;
+    float offsetLeft = 0.04;
+
+    float uL, uR;
+    if(sprite == 3) {
+        uL = sprite * spriteWidth - offsetLeft;
+        uR = uL + spriteWidth + offsetLeft;
+    } else {
+        uL = sprite * spriteWidth + offsetLeft;
+        uR = uL + spriteWidth - offsetLeft;
+    }
     
-    bool useTop = cellNumber % 2 == 1;
+    bool useTop = rand() % 2 == 1;
     bool flipU = rand() % 2 == 1;
-    
+
     float vB, vT;
     if(useTop) {
-        vB = 0.0f;
-        vT = 0.667f;
+        vB = 0.0f + offsetTop;
+        vT = 0.667f - offsetTop;
     } else {
-        vB = 1.0f;
-        vT = 0.333f;
+        vB = 1.0f - offsetTop;
+        vT = 0.333f + offsetTop;
     }
     
     // Only flip horizontally, never touch V
@@ -398,6 +476,7 @@ Starship::CellTexCoords Starship::getRandomAtlasCoords(AtlasSprite sprite, int c
     
     return coords;
 }
+
 
 void Starship::updateCellUniforms() {
     if(cells.empty()) return;
@@ -431,16 +510,7 @@ void Starship::updateCellUniforms() {
 
 void Starship::newAttackCell(CellName name, int cellNumber) {
     TriangleCell newCell;
-
-    TriangleCell foundCell;
-    for(int i = 0; i < cells.size(); ++i) {
-        if(cells[i].cellNumber == cellNumber) {
-            foundCell = cells[i];
-            break;
-        }
-    }
-    newCell.middleOfTriangle = foundCell.middleOfTriangle; // get back old state, then overwrite
-
+    newCell.middleOfTriangle = cells[cellNumber-1].middleOfTriangle; // get back old state, then overwrite
     newCell.category = CellCategory::CELL_ATTACK;
     newCell.name = name;
     newCell.cellAlive = true;

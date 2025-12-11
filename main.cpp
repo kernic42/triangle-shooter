@@ -9,27 +9,49 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "stbImage/stb_image.h"
+
+float g_aspect = 0;
 glm::mat4 projection;
+GLuint backgroundTexture = -1; 
 
 const char* quadVertexShaderSrc = R"(#version 300 es
 layout(location = 0) in vec2 aPosition;
-layout(location = 1) in vec2 aTexCoord;
-out vec2 vTexCoord;
+layout(location = 1) in vec2 aSceneUV;
+layout(location = 2) in vec2 aTileUV;
+
+out vec2 vSceneUV;
+out vec2 vTileUV;
+
 void main() {
-    vTexCoord = aTexCoord;
+    vSceneUV = aSceneUV;
+    vTileUV  = aTileUV;
     gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 )";
 
-const char* quadFragmentShaderSrc = R"(#version 300 es
+ const char* quadFragmentShaderSrc = R"(#version 300 es
 precision mediump float;
-in vec2 vTexCoord;
+
+in vec2 vSceneUV;
+in vec2 vTileUV;
+
 out vec4 fragColor;
-uniform sampler2D uTexture;
+
+uniform sampler2D uSceneTexture;   // FBO texture
+uniform sampler2D uTileTexture;    // Repeating background
+
 void main() {
-    fragColor = texture(uTexture, vTexCoord);
+    vec4 bg = texture(uTileTexture, vTileUV);
+    vec4 scene = texture(uSceneTexture, vSceneUV);
+
+    fragColor = bg * (1.0 - scene.a) + scene;
 }
 )";
+
+
+
+
 
 // Global state
 struct AppState {
@@ -164,37 +186,99 @@ void initFBO() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void initQuad() {
-    app.quadProgram = createProgram(quadVertexShaderSrc, quadFragmentShaderSrc);
+void updateFBOTextureUV() {
+    glUseProgram(app.quadProgram);
+
+    float tileScale = 0.5;
+    float tileWidth = 208.0 * tileScale;
+    float tileHeight = 138.0 * tileScale;
+
+    float tileCountX = (float)app.width / tileWidth;   // how many cells fit over width
+    float tileCountY = (float)app.height / tileHeight; // how many cells fit over height
     
-    // Fullscreen quad vertices: position (x, y), texcoord (u, v)
+    float offsetX = -fmod(tileCountX, 1.0) / 2.0 +        // offset by the fraction that cell takes
+                    ((int)floor(tileCountX)+1) % 2 * 0.5; // cell count that fits is even(without remainder), then do + half offset
+
+    float offsetY = -fmod(tileCountY, 1.0) / 2.0 +        // offset by the fraction that cell takes
+                    ((int)floor(tileCountY)+1) % 2 * 0.5; // cell count that fits is even(without remainder), then do + half offset
+
     float vertices[] = {
-        // Position      // TexCoord
-        -1.0f,  1.0f,    0.0f, 1.0f,  // Top Left
-        -1.0f, -1.0f,    0.0f, 0.0f,  // Bottom Left
-         1.0f, -1.0f,    1.0f, 0.0f,  // Bottom Right
+        // Position      // SceneUv    // TileUv
+        -1.0f,  1.0f,    0.0f, 1.0f,   offsetX,              offsetY + tileCountY, // Top Left
+        -1.0f, -1.0f,    0.0f, 0.0f,   offsetX,              offsetY,              // Bottom Left
+         1.0f, -1.0f,    1.0f, 0.0f,   offsetX + tileCountX, offsetY,              // Bottom Right
         
-        -1.0f,  1.0f,    0.0f, 1.0f,  // Top Left
-         1.0f, -1.0f,    1.0f, 0.0f,  // Bottom Right
-         1.0f,  1.0f,    1.0f, 1.0f   // Top Right
+        -1.0f,  1.0f,    0.0f, 1.0f,   offsetX,              offsetY + tileCountY, // Top Left
+         1.0f, -1.0f,    1.0f, 0.0f,   offsetX + tileCountX, offsetY,              // Bottom Right
+         1.0f,  1.0f,    1.0f, 1.0f,   offsetX + tileCountX, offsetY + tileCountY  // Top Right
     };
-    
-    glGenVertexArrays(1, &app.quadVAO);
-    glGenBuffers(1, &app.quadVBO);
     
     glBindVertexArray(app.quadVAO);
     glBindBuffer(GL_ARRAY_BUFFER, app.quadVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    /*    float imgWidth = 208;
+    float imgHeight = 138;
+    float aspect = imgWidth / imgHeight;
+
+    float height = 1.0 * aspect;
+    float width = 1.0  * g_aspect;
+    //printf("g_aspect: %f\n", g_aspect);
+    printf("aspect: %f\n", aspect);
+
+    float multiplyFactor = 11.0f;
+
+    float tileHeight = height * multiplyFactor;
+    float tileWidth = width * multiplyFactor;*/
+}
+
+EM_BOOL onResize(int eventType, const EmscriptenUiEvent* e, void* userData) {
+    app.width = e->windowInnerWidth;
+    app.height = e->windowInnerHeight;
+    emscripten_set_canvas_element_size("#canvas", app.width, app.height);
+    glViewport(0, 0, app.width, app.height);
+    
+    // Update projection matrix
+    g_aspect = (float)app.width / (float)app.height;
+    projection = glm::ortho(-g_aspect, g_aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+    
+    // Recreate FBO at new size
+    if (app.fbo) glDeleteFramebuffers(1, &app.fbo);
+    if (app.fboTexture) glDeleteTextures(1, &app.fboTexture);
+    if (app.rbo) glDeleteRenderbuffers(1, &app.rbo);
+    if (app.resolveFBO) glDeleteFramebuffers(1, &app.resolveFBO);
+    if (app.msaaRBO) glDeleteRenderbuffers(1, &app.msaaRBO);
+    initFBO();
+
+    updateFBOTextureUV();
+    
+    return EM_TRUE;
+}
+
+void initQuad() {
+    app.quadProgram = createProgram(quadVertexShaderSrc, quadFragmentShaderSrc);
+
+    glGenVertexArrays(1, &app.quadVAO);
+    glGenBuffers(1, &app.quadVBO);
+
+    glBindVertexArray(app.quadVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, app.quadVBO);
     
     // Position attribute
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     
-    // TexCoord attribute
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    // SceneUv attribute
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    // TileUv attribute
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(4 * sizeof(float)));
+    glEnableVertexAttribArray(2);
     
     glBindVertexArray(0);
+
+    updateFBOTextureUV();
 }
 
 int f = 0;
@@ -202,69 +286,15 @@ int f = 0;
 void renderToFBO() {
     glBindFramebuffer(GL_FRAMEBUFFER, app.fbo);
     glViewport(0, 0, app.width, app.height);
-    
+
     // Clear with a dark color
-    glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // alpha = 0
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     ship.drawGrid();
     ship.drawCells();
-
-    int aliveCount = 0;
-    std::vector<glm::vec2> positions;
-    std::vector<int> drawnIndex;
+    ship.renderCannons();
     
-
-    static int loopCount = 0;
-    if(f % 60 == 0) {
-        loopCount += 1;
-    }
-    
-    for(int i = 139; i < 139 + loopCount; ++i) {
-        // ship.renderCannons(ship.cells[i].middleOfTriangle.x, ship.cells[i].middleOfTriangle.y);
-    }
-
-    for(int i = 0; i < ship.cells.size(); ++i) {
-        if(ship.cells[i].cellAlive) {
-            printf("alive i=%d\n", i);
-
-            aliveCount++;
-            ship.renderCannons(ship.cells[i].middleOfTriangle.x, ship.cells[i].middleOfTriangle.y);
-            positions.push_back(ship.cells[i].middleOfTriangle);
-            drawnIndex.push_back(i);
-        }
-    }
-
-    //for(int i = 139; i < 162; ++i) {
-    //     ship.renderCannons(ship.cells[i].middleOfTriangle.x, ship.cells[i].middleOfTriangle.y);
-    //}
-
-    //ship.renderCannons(ship.cells[139 - 81].middleOfTriangle.x, ship.cells[139 - 81].middleOfTriangle.y);
-    // ship.renderCannons(ship.cells[140 - 81].middleOfTriangle.x, ship.cells[140 - 81].middleOfTriangle.y);
-    //ship.renderCannons(ship.cells[141 - 81].middleOfTriangle.x, ship.cells[141 - 81].middleOfTriangle.y);
-
-    //ship.renderCannons(ship.cells[129+3 - 81].middleOfTriangle.x, ship.cells[129+3 - 81].middleOfTriangle.y);
-   //  ship.renderCannons(ship.cells[130+3 - 81].middleOfTriangle.x, ship.cells[130+3 - 81].middleOfTriangle.y);
-   // ship.renderCannons(ship.cells[131+3 - 81].middleOfTriangle.x, ship.cells[131+3 - 81].middleOfTriangle.y);
-
-
-    for(int i = 40 + 20; i < 60 + 20; ++i) {
-      //  ship.renderCannons(ship.cells[i].middleOfTriangle.x, ship.cells[i].middleOfTriangle.y);
-    }
-
-
-    f++;
-    if(f % 200 == 0) {
-        printf("ship.cells.size(): %d\n", ship.cells.size());
-        printf("aliveCount: %d\n", aliveCount);
-
-        for(int i = 0; i < drawnIndex.size(); ++i) {
-            printf("drawnIndex[%d] = %d\n", i, drawnIndex[i]);
-            printf("position[%d]: x=%f, y=%f\n", i, positions[i].x, positions[i].y);
-        }
-    }
-
-
     glBindFramebuffer(GL_READ_FRAMEBUFFER, app.fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, app.resolveFBO);
     glBlitFramebuffer(0, 0, app.width, app.height, 0, 0, app.width, app.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -281,9 +311,15 @@ void renderToScreen() {
     // Draw fullscreen quad with FBO texture
     glUseProgram(app.quadProgram);
     glBindVertexArray(app.quadVAO);
+
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, app.fboTexture);
-    glUniform1i(glGetUniformLocation(app.quadProgram, "uTexture"), 0);
+    glUniform1i(glGetUniformLocation(app.quadProgram, "uSceneTexture"), 0);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, backgroundTexture);
+    glUniform1i(glGetUniformLocation(app.quadProgram, "uTileTexture"), 1);
+
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
@@ -297,26 +333,32 @@ void mainLoop() {
     renderToScreen();
 }
 
-EM_BOOL onResize(int eventType, const EmscriptenUiEvent* e, void* userData) {
-    app.width = e->windowInnerWidth;
-    app.height = e->windowInnerHeight;
-    emscripten_set_canvas_element_size("#canvas", app.width, app.height);
-    glViewport(0, 0, app.width, app.height);
+GLuint static loadTexture(const char* path) {
+    int width, height, channels;
+    unsigned char* data = stbi_load(path, &width, &height, &channels, 4);  // force RGBA
     
-    // Update projection matrix
-    float aspect = (float)app.width / (float)app.height;
-    projection = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+    if(!data) {
+        printf("Failed to load texture: %s\n", path);
+        return 0;
+    }
     
-    // Recreate FBO at new size
-    if (app.fbo) glDeleteFramebuffers(1, &app.fbo);
-    if (app.fboTexture) glDeleteTextures(1, &app.fboTexture);
-    if (app.rbo) glDeleteRenderbuffers(1, &app.rbo);
-    if (app.resolveFBO) glDeleteFramebuffers(1, &app.resolveFBO);
-    if (app.msaaRBO) glDeleteRenderbuffers(1, &app.msaaRBO);
-    initFBO();
+    GLuint texture;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
     
-    return EM_TRUE;
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    
+    stbi_image_free(data);
+    
+    printf("Loaded texture: %s (%dx%d)\n", path, width, height);
+    return texture;
 }
+
 
 int main() {
     // Set size FIRST
@@ -334,9 +376,9 @@ int main() {
 
     // Orthographic projection that corrects aspect ratio
     // This maps (-aspect, -1) to (aspect, 1) in world space to (-1, -1) to (1, 1) in clip space
-    float aspect = (float)app.width / (float)app.height;
-    projection = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 1.0f);
-
+    g_aspect = (float)app.width / (float)app.height;
+    projection = glm::ortho(-g_aspect, g_aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+g_aspect = (float)app.width / (float)app.height;
     // Create WebGL2 context
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
@@ -360,6 +402,8 @@ int main() {
     printf("GL_VERSION: %s\n", glGetString(GL_VERSION));
     printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
     
+    backgroundTexture = loadTexture("background_tile.png");
+
     // Initialize resources
     initFBO();
     initQuad();
@@ -378,7 +422,6 @@ int main() {
     ship.initCellMiddlePoints();
     ship.initGrid();
     ship.initCellRendering();
-    ship.initCannons();
 
     /*ship.newAttackCell(Starship::CELL_ICE, 1);
     ship.newAttackCell(Starship::CELL_ICE, 2);
@@ -405,13 +448,15 @@ int main() {
             ship.newAttackCell(Starship::CELL_FIRE, i);
     }
 
-     for(int i = 60; i < 104; ++i) {
+    for(int i = 60; i < 104; ++i) {
             ship.newAttackCell(Starship::CELL_FIRE, i);
     }
 
-         for(int i = 139; i < 164; ++i) {
-            ship.newAttackCell(Starship::CELL_FIRE, i);
+    for(int i = 139; i < 164; ++i) {
+            ship.newAttackCell(Starship::CELL_RADIOACTIVE, i);
     }
+
+    ship.initCannons();
 
 
     // Register mouse events

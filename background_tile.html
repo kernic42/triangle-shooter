@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Background Tile Export</title>
+    <style>
+        body { 
+            margin: 20px; 
+            background: #333; 
+            font-family: sans-serif;
+            color: white;
+        }
+        canvas { 
+            display: block; 
+            border: 1px solid #666;
+            margin-bottom: 10px;
+        }
+        .info { margin-bottom: 10px; }
+        .preview {
+            margin-top: 20px;
+        }
+        .preview canvas {
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <strong>Tile Export</strong> — Right-click the top canvas and "Save image as" PNG<br>
+        Size: <span id="size"></span>
+    </div>
+    <canvas id="tile"></canvas>
+    
+    <div class="preview">
+        <strong>Preview (4x4 repeat)</strong>
+        <canvas id="preview"></canvas>
+    </div>
+
+    <script>
+        // Tile dimensions
+        const scale = 2;
+        const rectWidth = 90 * scale;
+        const rectHeight = 55 * scale;
+        const spacing = 14 * scale;
+        const radius = 10 * scale;
+        
+        // Tile = rectangle + spacing (same as original)
+        const tileWidth = rectWidth + spacing;
+        const tileHeight = rectHeight + spacing;
+        
+        document.getElementById('size').textContent = `${tileWidth} x ${tileHeight} px`;
+        
+        function drawRoundedRect(ctx, x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h - r);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+            ctx.lineTo(x + r, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+        }
+        
+        function drawTile(ctx, tileX, tileY) {
+            // Clip to tile bounds so shadow doesn't bleed
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(tileX, tileY, tileWidth, tileHeight);
+            ctx.clip();
+            
+            // Rectangle at top-left of tile
+            const ox = tileX;
+            const oy = tileY;
+            
+            // Drop shadow (goes bottom-right into spacing)
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+            ctx.shadowBlur = 14 * scale;
+            ctx.shadowOffsetX = 5 * scale;
+            ctx.shadowOffsetY = 6 * scale;
+            drawRoundedRect(ctx, ox, oy, rectWidth, rectHeight, radius);
+            ctx.fillStyle = '#050508';
+            ctx.fill();
+            ctx.restore();
+            
+            // Main body
+            drawRoundedRect(ctx, ox, oy, rectWidth, rectHeight, radius);
+            const bodyGradient = ctx.createLinearGradient(ox, oy + rectHeight, ox + rectWidth, oy);
+            bodyGradient.addColorStop(0, '#1a1b24');
+            bodyGradient.addColorStop(0.5, '#14151c');
+            bodyGradient.addColorStop(1, '#0e0f14');
+            ctx.fillStyle = bodyGradient;
+            ctx.fill();
+            
+            // Clipped interior
+            ctx.save();
+            drawRoundedRect(ctx, ox, oy, rectWidth, rectHeight, radius);
+            ctx.clip();
+            
+            // Top edge shine
+            const topShineGradient = ctx.createLinearGradient(ox, oy, ox, oy + 39 * scale);
+            topShineGradient.addColorStop(0, 'rgba(200, 205, 220, 0.07)');
+            topShineGradient.addColorStop(0.3, 'rgba(180, 185, 200, 0.03)');
+            topShineGradient.addColorStop(0.6, 'rgba(160, 165, 180, 0.01)');
+            topShineGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = topShineGradient;
+            ctx.fillRect(ox, oy, rectWidth, rectHeight);
+            
+            // Left edge shine
+            const leftShineGradient = ctx.createLinearGradient(ox, oy, ox + 31 * scale, oy);
+            leftShineGradient.addColorStop(0, 'rgba(200, 205, 220, 0.06)');
+            leftShineGradient.addColorStop(0.3, 'rgba(180, 185, 200, 0.025)');
+            leftShineGradient.addColorStop(0.6, 'rgba(160, 165, 180, 0.01)');
+            leftShineGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = leftShineGradient;
+            ctx.fillRect(ox, oy, rectWidth, rectHeight);
+            
+            // Bottom edge shadow
+            const bottomShadow = ctx.createLinearGradient(ox, oy + rectHeight, ox, oy + rectHeight - 46 * scale);
+            bottomShadow.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+            bottomShadow.addColorStop(0.2, 'rgba(0, 0, 0, 0.16)');
+            bottomShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.11)');
+            bottomShadow.addColorStop(0.55, 'rgba(0, 0, 0, 0.07)');
+            bottomShadow.addColorStop(0.7, 'rgba(0, 0, 0, 0.04)');
+            bottomShadow.addColorStop(0.85, 'rgba(0, 0, 0, 0.015)');
+            bottomShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = bottomShadow;
+            ctx.fillRect(ox, oy, rectWidth, rectHeight);
+            
+            // Right edge shadow
+            const rightShadow = ctx.createLinearGradient(ox + rectWidth, oy, ox + rectWidth - 46 * scale, oy);
+            rightShadow.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+            rightShadow.addColorStop(0.2, 'rgba(0, 0, 0, 0.16)');
+            rightShadow.addColorStop(0.4, 'rgba(0, 0, 0, 0.11)');
+            rightShadow.addColorStop(0.55, 'rgba(0, 0, 0, 0.07)');
+            rightShadow.addColorStop(0.7, 'rgba(0, 0, 0, 0.04)');
+            rightShadow.addColorStop(0.85, 'rgba(0, 0, 0, 0.015)');
+            rightShadow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = rightShadow;
+            ctx.fillRect(ox, oy, rectWidth, rectHeight);
+            
+            // Dot grid
+            const dotSpacing = 6 * scale;
+            const dotRadius = 0.8 * scale;
+            ctx.fillStyle = 'rgba(200, 202, 212, 0.11)';
+            for (let dy = dotSpacing; dy < rectHeight - 3 * scale; dy += dotSpacing) {
+                for (let dx = dotSpacing; dx < rectWidth - 3 * scale; dx += dotSpacing) {
+                    ctx.beginPath();
+                    ctx.arc(ox + dx, oy + dy, dotRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            ctx.restore();
+            
+            // White outline
+            drawRoundedRect(ctx, ox, oy, rectWidth, rectHeight, radius);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 0.5 * scale;
+            ctx.stroke();
+            
+            ctx.restore(); // restore tile clip
+        }
+        
+        // Draw single tile
+        const tileCanvas = document.getElementById('tile');
+        tileCanvas.width = tileWidth;
+        tileCanvas.height = tileHeight;
+        const tileCtx = tileCanvas.getContext('2d');
+        
+        // Background
+        tileCtx.fillStyle = '#0c0c12';
+        tileCtx.fillRect(0, 0, tileWidth, tileHeight);
+        
+        drawTile(tileCtx, 0, 0);
+        
+        // Draw preview (4x4 tiles)
+        const previewCanvas = document.getElementById('preview');
+        previewCanvas.width = tileWidth * 4;
+        previewCanvas.height = tileHeight * 4;
+        const previewCtx = previewCanvas.getContext('2d');
+        
+        previewCtx.fillStyle = '#0c0c12';
+        previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+        
+        for (let row = 0; row < 4; row++) {
+            for (let col = 0; col < 4; col++) {
+                drawTile(previewCtx, col * tileWidth, row * tileHeight);
+            }
+        }
+    </script>
+</body>
+</html>

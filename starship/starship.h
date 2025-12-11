@@ -128,7 +128,7 @@ public:
     // Grid settings
     int gridWidth = 9;
     int gridHeight = 9;
-    float cellSize = 0.1f;
+    float cellSize = 0.120;
     float originX = -(gridWidth*cellSize)/2.0;
     float originY = -(gridHeight*cellSize)/2.0;
 
@@ -170,9 +170,19 @@ public:
     GLuint cannonTexture;
     GLuint cannonShader;
 
+    // In Starship class header
+    static const int MAX_CANNONS = 256;
+    GLint uCannonPositionsLoc;
+    GLint uCannonAngleLoc;
+    GLint uShipRotationLoc;
+    GLint uProjectionLoc;
+    GLint uTextureLoc;
+    int cannonCount = 0;
+
     float cursorX = 0;
     float cursorY = 0;
     float aspect = 0;
+
 
     Starship();
     ~Starship();
@@ -180,8 +190,9 @@ public:
     CellTexCoords getRandomAtlasCoords(AtlasSprite sprite, int cellNumber);
     
     void setAspect(float aspect);
+    void updateCannonPositions();
     void initCannons();
-    void renderCannons(float x, float y);
+    void renderCannons();
     void initCellMiddlePoints();
     void initStarshipCells();
 

@@ -10,7 +10,15 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include "stbImage/stb_image.h"
+#include "lineRenderer/lineRenderer.h"
+#include "textRenderer/textRenderer.h"
+#include "button/button.h"
+#include "renderer2d/renderer2d.h"
 
+TextRenderer textRenderer;
+LineRenderer lineRenderer;
+Renderer2D renderer2d;
+ButtonManager buttonManager;
 float g_aspect = 0;
 glm::mat4 projection;
 GLuint backgroundTexture = -1; 
@@ -49,10 +57,6 @@ void main() {
 }
 )";
 
-
-
-
-
 // Global state
 struct AppState {
     int width = 800;
@@ -88,16 +92,34 @@ void browserToNormalized(float browserX, float browserY, float& outX, float& out
 }
 
 EM_BOOL onMouseDown(int eventType, const EmscriptenMouseEvent* e, void* userData) {
+    // Pixel coords for UI (Y flipped for OpenGL)
+    float pixelX = e->targetX;
+    float pixelY = app.height - e->targetY;
+    
+    if (e->button == 0) {
+        buttonManager.fingerStart(pixelX, pixelY);
+    }
+    
+    // Normalized coords for your ship
     float x, y;
     browserToNormalized(e->targetX, e->targetY, x, y);
     ship.onMouseDown(e->button, x, y);
+    
     return EM_TRUE;
 }
 
 EM_BOOL onMouseUp(int eventType, const EmscriptenMouseEvent* e, void* userData) {
+    float pixelX = e->targetX;
+    float pixelY = app.height - e->targetY;
+    
+    if (e->button == 0) {
+        buttonManager.fingerRelease(pixelX, pixelY);
+    }
+    
     float x, y;
     browserToNormalized(e->targetX, e->targetY, x, y);
     ship.onMouseUp(e->button, x, y);
+    
     return EM_TRUE;
 }
 
@@ -294,7 +316,17 @@ void renderToFBO() {
     ship.drawGrid();
     ship.drawCells();
     ship.renderCannons();
-    
+
+    lineRenderer.draw(glm::vec2(0.0, 0.0), glm::vec2(0.5, 0.5), glm::vec4(1.0, 1.0, 0.0, 1.0), 0.05);
+    lineRenderer.draw(glm::vec2(0.0, 0.0), glm::vec2(-0.5, 0.5), glm::vec4(1.0, 0.0, 0.0, 1.0), 0.02);
+    lineRenderer.flush(glm::value_ptr(projection), 0.0f);
+
+    textRenderer.draw("Hello World", 100.0f, 500.0f, 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
+    textRenderer.drawCentered("Centered Text", 640.0f, 360.0f, 0.5f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+    textRenderer.flush();
+
+    buttonManager.drawButtons();
+
     glBindFramebuffer(GL_READ_FRAMEBUFFER, app.fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, app.resolveFBO);
     glBlitFramebuffer(0, 0, app.width, app.height, 0, 0, app.width, app.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
@@ -422,6 +454,38 @@ g_aspect = (float)app.width / (float)app.height;
     ship.initCellMiddlePoints();
     ship.initGrid();
     ship.initCellRendering();
+    lineRenderer.init();
+    textRenderer.initialize("fonts/Roboto-Medium.ttf", (float)app.width, (float)app.height);
+    
+    renderer2d.init();
+    renderer2d.setScreenSize( (float)app.width, (float)app.height);
+    buttonManager.init(&textRenderer, &renderer2d);
+
+    // Create button
+    Button config;
+    config.x = 100;
+    config.y = 100;
+    config.width = 200;
+    config.height = 50;
+    config.text = "Click Me";
+    config.textScale = 0.5f;
+    config.color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);
+    config.borderRadius = 10.0f;
+    config.borderColor = glm::vec4(0.0, 0.0, 0.0, 1.0); // grey
+    config.borderWidth = 1.0;
+
+    Button* myButton = buttonManager.createButton(config);
+    buttonManager.setCallback(myButton, [](Button* btn) {
+        static bool toggle = false;
+        toggle = !toggle;
+        
+        if (toggle) {
+            btn->color = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);  // red
+        } else {
+            btn->color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);  // blue
+        }
+    });
+
 
     /*ship.newAttackCell(Starship::CELL_ICE, 1);
     ship.newAttackCell(Starship::CELL_ICE, 2);

@@ -231,7 +231,8 @@ void TextRenderer::setupRenderState() {
     glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(screenWidth), 
                                        0.0f, static_cast<float>(screenHeight), 
                                        -1.0f, 1.0f);
-
+                                       
+    glEnable(GL_BLEND);
     glBindVertexArray(vao);
     glUseProgram(shaderProgram);
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));

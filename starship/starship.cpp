@@ -33,7 +33,7 @@ uniform mat4 uProjection;
 uniform mat3 uShipRotation;
 
 out vec2 vTexCoord;
-out vec2 vLocalUV;
+out vec3 vBary;
 out vec4 vColor;
 
 void main() {
@@ -41,10 +41,9 @@ void main() {
     vTexCoord = uTexCoords[gl_InstanceID * 3 + gl_VertexID];
     vColor = uColors[gl_InstanceID];
     
-    // Hardcoded local UVs for border calculation
-    if(gl_VertexID == 0) vLocalUV = vec2(0.0, 0.0);
-    else if(gl_VertexID == 1) vLocalUV = vec2(1.0, 0.0);
-    else vLocalUV = vec2(1.0, 1.0);
+    if(gl_VertexID == 0) vBary = vec3(1.0, 0.0, 0.0);
+    else if(gl_VertexID == 1) vBary = vec3(0.0, 1.0, 0.0);
+    else vBary = vec3(0.0, 0.0, 1.0);
     
     vec4 localPos = model * vec4(aPos, 0.0, 1.0);
     vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
@@ -56,7 +55,7 @@ static const char* cellFragmentShader = R"(#version 300 es
 precision mediump float;
 
 in vec2 vTexCoord;
-in vec2 vLocalUV;
+in vec3 vBary;
 in vec4 vColor;
 out vec4 fragColor;
 
@@ -66,11 +65,7 @@ uniform float uBorderWidth;
 uniform float uTime;
 
 void main() {
-    float distFromBottom = vLocalUV.y;
-    float distFromRight = 1.0 - vLocalUV.x;
-    float distFromDiagonal = (vLocalUV.x - vLocalUV.y) * 0.7071;
-    
-    float minDist = min(min(distFromBottom, distFromRight), distFromDiagonal);
+    float minDist = min(min(vBary.x, vBary.y), vBary.z);
     
     float edge = fwidth(minDist);
     float blend = smoothstep(uBorderWidth - edge, uBorderWidth + edge, minDist);
@@ -147,8 +142,8 @@ static GLuint compileShader(GLenum type, const char* src) {
     return shader;
 }
 
-Starship::Starship() 
-    : gridVAO(0),
+Starship::Starship() :
+      gridVAO(0),
       gridVBO(0),
       gridShader(0),
       rotationUniformLoc(-1),
@@ -308,9 +303,7 @@ void Starship::initCannons() {
 
 void Starship::renderCannons() {
     if (cannonCount == 0) return;
-
-    printf("renderCannons\n");
-
+    
     // Compute cannon angle toward cursor
     float dirX = cursorX * aspect;
     float dirY = cursorY;
@@ -341,8 +334,10 @@ void Starship::renderCannons() {
     glBindVertexArray(0);
 }
 
-void Starship::setAspect(float aspect) {
+void Starship::setAspect(float aspect, float width, float height) {
     this->aspect = aspect;
+    this->width = width;
+    this->height = height;
 }
 
 void Starship::initCellRendering() {
@@ -482,6 +477,7 @@ void Starship::updateCellUniforms() {
     if(cells.empty()) return;
     
     glUseProgram(cellShader);
+    glBindVertexArray(cellVAO);
     
     std::vector<glm::mat4> transforms(cells.size());
     std::vector<glm::vec2> texCoords(cells.size() * 3);
@@ -508,57 +504,81 @@ void Starship::updateCellUniforms() {
     glUniform4fv(colorsLoc, aliveCount, glm::value_ptr(colors[0]));
 }
 
-void Starship::newAttackCell(CellName name, int cellNumber) {
-    TriangleCell newCell;
-    newCell.middleOfTriangle = cells[cellNumber-1].middleOfTriangle; // get back old state, then overwrite
-    newCell.category = CellCategory::CELL_ATTACK;
-    newCell.name = name;
-    newCell.cellAlive = true;
-    newCell.cellNumber = cellNumber;
+bool Starship::isCursorInsideCell(glm::vec2 cursor, glm::vec4 v1, glm::vec4 v2, glm::vec4 v3) {
+    glm::vec2 a = glm::vec2(v1);
+    glm::vec2 b = glm::vec2(v2);
+    glm::vec2 c = glm::vec2(v3);
 
-    // calculate x,y translate (row column) via cellNumber over grid
-    int pairIndex = (cellNumber - 1) / 2; // which square cell
-    int row = pairIndex / gridWidth;
-    int column = pairIndex % gridWidth;
+    auto sign = [](glm::vec2 p, glm::vec2 a, glm::vec2 b) {
+        return (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
+    };
 
-    // Both triangles in a pair share the same center position
-    newCell.x = originX + column * cellSize + cellSize / 2.0f;
-    newCell.y = -originY - cellSize - row * cellSize + cellSize / 2.0f;
+    float d1 = sign(cursor, a, b);
+    float d2 = sign(cursor, b, c);
+    float d3 = sign(cursor, c, a);
 
-    glm::mat4 translate = glm::translate(glm::mat4(1.0f), glm::vec3(newCell.x, newCell.y, 0.0f));
-    glm::mat4 rotate = glm::mat4(1.0f);
-    if(cellNumber % 2 == 1) {
-        rotate = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    }
+    bool hasNeg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    bool hasPos = (d1 > 0) || (d2 > 0) || (d3 > 0);
 
-    newCell.transform = translate * rotate;
+    return !(hasNeg && hasPos);
+}
 
-    if(name == CellName::CELL_FIRE) {
-        newCell.spriteName = ATLAS_FIRE;
-        newCell.texCoords = getRandomAtlasCoords(ATLAS_FIRE, cellNumber);
-        newCell.color = {1.0f, 0.5f, 0.2f, 1.0f};  // orange
-    }
-    else if (name == CellName::CELL_ICE) {
-        newCell.spriteName = ATLAS_ICE;
-        newCell.texCoords = getRandomAtlasCoords(ATLAS_ICE, cellNumber);
-        newCell.color = {0.2f, 0.6f, 1.0f, 1.0f};  // blue
-    }
-    else if(name == CellName::CELL_RADIOACTIVE) {
-        newCell.spriteName = ATLAS_RADIOACTIVE;
-        newCell.texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, cellNumber);
-        newCell.color = {0.2f, 1.0f, 0.2f, 1.0f};  // green
-    }
-    
-    // replace cell in cells vector
+int Starship::getSelectedCellId(glm::vec2 cursorPos) {
+    float half = cellSize / 2.0f;
+    glm::vec4 triangleVerts[] = {
+        {-half, -half, 0, 1.0},
+        { half, -half, 0, 1.0},
+        { half,  half, 0, 1.0}
+    };
+
+    glm::mat4 shipRotation = glm::rotate(glm::mat4(1.0f), currentRotation, glm::vec3(0.0f, 0.0f, 1.0f));
+
+    // iterate through cells in order
     for(int i = 0; i < cells.size(); ++i) {
-        if(cells[i].cellNumber == cellNumber) {
-            cells[i] = newCell;
-            break;
-        }
+        // apply this cell transform to triangleVerts
+        glm::vec4 vert1 = projection * shipRotation * cells[i].transform * triangleVerts[0];
+        glm::vec4 vert2 = projection * shipRotation * cells[i].transform * triangleVerts[1];
+        glm::vec4 vert3 = projection * shipRotation * cells[i].transform * triangleVerts[2];
+
+        // if cursor is inside these triangleVerts, return id of cell
+        if(isCursorInsideCell(cursorPos, vert1, vert2, vert3))
+            return cells[i].cellNumber;
     }
 
-    // Update uniforms after adding/replacing cell
-    updateCellUniforms();
+    return -1; // cursor wasn't inside any cell
+}
+
+void Starship::initStarshipCells() {
+    int totalTriangles = gridWidth * gridHeight * 2;
+
+    cells.resize(0);
+
+    for(int i = 1; i < totalTriangles + 1; ++i) {
+        int cellNumber = i;
+
+        TriangleCell newCell;
+        newCell.cellAlive = false;
+        newCell.cellNumber = cellNumber;
+
+        // calculate x,y translate (row column) via cellNumber over grid
+        int pairIndex = (cellNumber - 1) / 2; // which square cell
+        int row = pairIndex / gridWidth;
+        int column = pairIndex % gridWidth;
+
+        // Both triangles in a pair share the same center position
+        newCell.x = originX + column * cellSize + cellSize / 2.0f;
+        newCell.y = -originY - cellSize - row * cellSize + cellSize / 2.0f;
+
+        glm::mat4 translate = glm::translate(glm::mat4(1.0f), glm::vec3(newCell.x, newCell.y, 0.0f));
+        glm::mat4 rotate = glm::mat4(1.0f);
+        if(cellNumber % 2 == 1) {
+            rotate = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        }
+
+        newCell.transform = translate * rotate;
+
+        cells.push_back(newCell);
+    }
 }
 
 void Starship::initCellMiddlePoints() {
@@ -588,17 +608,256 @@ void Starship::initCellMiddlePoints() {
     }
 }
 
-void Starship::initStarshipCells() {
-    int totalTriangles = gridWidth * gridHeight * 2;
+void Starship::updateMenuTriangle() {
+    glUseProgram(cellMenuShader);
+    glBindVertexArray(cellMenuVAO);
+    
+    glUniformMatrix4fv(transformsLoc, cellMenu.transforms.size(), GL_FALSE,  glm::value_ptr(cellMenu.transforms[0]));
+    glUniform2fv(texCoordsLoc, cellMenu.texCoords.size() * 3,  glm::value_ptr(cellMenu.texCoords[0]));
+    glUniform4fv(colorsLoc, cellMenu.colors.size(),  glm::value_ptr(cellMenu.colors[0]));
+}
 
-    cells.resize(0);
+void Starship::newMenuTriangle(CellName name, int i) { // if I do i too far all data inbetween is corrupted and unitialized
+    if(cellMenu.transforms.size() <= i) cellMenu.transforms.resize(i+1);
+    if(cellMenu.colors.size() <= i) cellMenu.colors.resize(i+1);
+    if(cellMenu.texCoords.size() <= i * 3) cellMenu.texCoords.resize((i+1) * 3);
 
-    for(int i = 1; i < totalTriangles + 1; ++i) {
-        TriangleCell newCell;
-        newCell.cellAlive = false;
-        newCell.cellNumber = i;
-        cells.push_back(newCell);
+    CellTexCoords texCoords;
+
+    if(name == CellName::CELL_FIRE) {
+        texCoords = getRandomAtlasCoords(ATLAS_FIRE, i);
+        printf("1\n");
     }
+    else if (name == CellName::CELL_ICE) {
+       texCoords = getRandomAtlasCoords(ATLAS_ICE, i);
+       printf("2\n");
+    }
+    else if(name == CellName::CELL_RADIOACTIVE) {
+        texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, i);
+        printf("3\n");
+    }
+
+    cellMenu.texCoords[i * 3 + 0] = glm::vec2(texCoords.u0, texCoords.v0);
+    cellMenu.texCoords[i * 3 + 1] = glm::vec2(texCoords.u1, texCoords.v1);
+    cellMenu.texCoords[i * 3 + 2] = glm::vec2(texCoords.u2, texCoords.v2);
+
+    cellMenu.transforms[i] = glm::translate(glm::mat4(1), glm::vec3(name * 0.08, 0.0, 0.0));
+    
+    cellMenu.colors[i] = glm::vec4(1.0, 1.0, 1.0, 1.0);
+
+    updateMenuTriangle();
+}
+
+void Starship::setButtonManager(ButtonManager *buttonManager, Renderer2D *renderer2d) {
+    this->buttonManager = buttonManager;
+    this->renderer2d = renderer2d;
+}
+
+void Starship::createMenuButtons(CellCategory category) {
+    const int buttonCount = 8;
+    typedef struct {
+        std::string cellText[buttonCount];
+        CellName cellName[buttonCount];
+    } menuItems_t;
+
+    menuItems_t menuItems;
+
+    // menuConfig for attack type cell
+    if(category == CellCategory::CELL_ATTACK) {
+        menuItems = {
+            {"Fire", "Ice", "Radioactive", "", "", "", "", ""},
+            {CellName::CELL_FIRE, CellName::CELL_ICE, CellName::CELL_RADIOACTIVE, CellName::CELL_RADIOACTIVE, CellName::CELL_RADIOACTIVE, CellName::CELL_RADIOACTIVE, CellName::CELL_RADIOACTIVE, CellName::CELL_RADIOACTIVE}
+        };
+    }
+
+    float menuWidth = 0.1;
+    float menuHeight = 0.4;
+    float menuAnchorX = 1.0 - menuWidth - 0.02;
+    float menuAnchorY = 0.02;
+
+    float buttonWidth = 0.03;
+    float buttonHeight = 0.05;
+
+    int btnCountPerRow = 2;
+    int btnCountPerColumn = buttonCount / btnCountPerRow;
+
+    float marginLeftRight = 0.01;
+    float marginTopBottom = 0.02;
+
+    for(int i = 0; i < buttonCount; ++i) {
+        // column (x)
+        int column = i % btnCountPerRow; // remainder from i after removing all row
+
+        float totalWidthRowBtns = btnCountPerRow * buttonWidth;
+        float availableXRange = menuWidth - totalWidthRowBtns - marginLeftRight*2.0;
+        float gapX = availableXRange / (btnCountPerRow-1);
+
+        float buttonX = menuAnchorX + marginLeftRight + column * (buttonWidth + gapX);
+        
+        // row (y)
+        int row = i / btnCountPerRow; // remove all row width from i, no remainder
+
+        float totalHeightColumnBtns = btnCountPerColumn * buttonHeight;
+        float availableYRange = menuHeight - totalHeightColumnBtns - marginTopBottom*2.0;
+        float gapY = availableYRange / (btnCountPerColumn-1);
+
+        float buttonY = menuAnchorY + menuHeight - buttonHeight - marginTopBottom - row * (gapY + buttonHeight);
+
+        // create button
+        Button config;
+        config.x = buttonX * width;
+        config.y = buttonY * height;
+        config.width = buttonWidth * width;
+        config.height = buttonHeight * height;
+        config.text = menuItems.cellText[i];
+        config.textScale = 0.3f;
+        config.color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);
+        config.borderRadius = 10.0f;
+        config.borderColor = glm::vec4(0.0, 0.0, 0.0, 1.0); // grey
+        config.borderWidth = 1.0;
+        config.drawImage = "top";
+        config.textureId = atlasCrackLoc;
+        config.imageHeight = 0.02 * height;
+        config.imageWidth = 0.02 * width;
+
+        Button* myButton = buttonManager->createButton(config);
+        buttonManager->setCallback(myButton, [](Button* btn) {
+            static bool toggle = false;
+            toggle = !toggle;
+            
+            if (toggle) {
+                btn->color = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);  // red
+            } else {
+                btn->color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);  // blue
+            }
+        });
+
+        // create triangle for button
+        float middleImgX = myButton->calculatedMiddleImgX; // set button middle image pos for getter
+        float middleImgY = myButton->calculatedMiddleImgY;
+        //newMenuTriangle(menuItems.cellName[i], i);
+    }
+
+    backWidth = menuWidth * width;
+    backHeight = menuHeight * height;
+    anchor = glm::vec2(menuAnchorX * width, menuAnchorY * height);
+}
+
+void Starship::draw() {
+    renderer2d->drawRect(anchor, backWidth, backHeight, 1.0, glm::vec4(1.0, 0.0, 0.0, 1.0));
+}
+
+void Starship::initMenuTriangle() {
+    // Create separate shader program for menu
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(vertexShader, 1, &cellVertexShader, nullptr);
+    glShaderSource(fragmentShader, 1, &cellFragmentShader, nullptr);
+    glCompileShader(fragmentShader);
+    glCompileShader(vertexShader);
+    cellMenuShader = glCreateProgram();
+    glAttachShader(cellMenuShader, vertexShader);
+    glAttachShader(cellMenuShader, fragmentShader);
+    glLinkProgram(cellMenuShader);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    // Get uniform locations for menu shader
+    menuTransformsLoc = glGetUniformLocation(cellMenuShader, "uTransforms");
+    menuTexCoordsLoc = glGetUniformLocation(cellMenuShader, "uTexCoords");
+    menuColorsLoc = glGetUniformLocation(cellMenuShader, "uColors");
+    menuProjectionLoc = glGetUniformLocation(cellMenuShader, "uProjection");
+    menuShipRotationLoc = glGetUniformLocation(cellMenuShader, "uShipRotation");
+    menuAtlasLoc = glGetUniformLocation(cellMenuShader, "uAtlas");
+    menuAtlasCrackLoc = glGetUniformLocation(cellMenuShader, "uCrackTex");
+    menuTimeLoc = glGetUniformLocation(cellMenuShader, "uTime");
+    menuBorderWidthLoc = glGetUniformLocation(cellMenuShader, "uBorderWidth");
+
+    // Create VAO/VBO
+    glGenVertexArrays(1, &cellMenuVAO);
+    glGenBuffers(1, &cellMenuVBO);
+
+    float triangleVerts[] = {
+        -0.5f, -0.5f,
+         0.5f, -0.5f,
+         0.0f,  0.5f
+    };
+
+    glBindVertexArray(cellMenuVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cellMenuVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+}
+
+
+void Starship::drawMenuTriangle() {
+    glDisable(GL_BLEND);
+    glUseProgram(cellMenuShader);
+
+    float borderWidth = 0.02; /// put in header
+    float currentTime = emscripten_get_now() / 1000.0f;
+
+    // Set uniforms
+    glUniformMatrix4fv(menuProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix3fv(menuShipRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat3(1.0f))); // no rotation for menu
+    glUniform1f(menuBorderWidthLoc, borderWidth);
+    glUniform1f(menuTimeLoc, currentTime);
+
+    // Bind atlas
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cellAtlasTexture);
+    glUniform1i(atlasLoc, 0);
+
+    // Bind crack atlas
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, crackAtlasTexture);
+    glUniform1i(atlasCrackLoc, 1);
+
+    // draw with vao that contains triangles for menu
+    glBindVertexArray(cellMenuVAO);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cellMenu.transforms.size());
+
+    glBindVertexArray(0);
+}
+
+void Starship::newAttackCell(CellName name, int cellNumber) {
+    TriangleCell newCell;
+    newCell = cells[cellNumber-1]; // get back old state, keep basic fields..
+    newCell.category = CellCategory::CELL_ATTACK;
+    newCell.name = name;
+    newCell.cellAlive = true;
+    newCell.cellNumber = cellNumber;
+
+    if(name == CellName::CELL_FIRE) {
+        newCell.spriteName = ATLAS_FIRE;
+        newCell.texCoords = getRandomAtlasCoords(ATLAS_FIRE, cellNumber);
+        newCell.color = {1.0f, 0.5f, 0.2f, 1.0f};  // orange
+    }
+    else if (name == CellName::CELL_ICE) {
+        newCell.spriteName = ATLAS_ICE;
+        newCell.texCoords = getRandomAtlasCoords(ATLAS_ICE, cellNumber);
+        newCell.color = {0.2f, 0.6f, 1.0f, 1.0f};  // blue
+    }
+    else if(name == CellName::CELL_RADIOACTIVE) {
+        newCell.spriteName = ATLAS_RADIOACTIVE;
+        newCell.texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, cellNumber);
+        newCell.color = {0.2f, 1.0f, 0.2f, 1.0f};  // green
+    }
+    
+    // replace cell in cells vector
+    for(int i = 0; i < cells.size(); ++i) {
+        if(cells[i].cellNumber == cellNumber) {
+            cells[i] = newCell;
+            break;
+        }
+    }
+
+    // Update uniforms after adding/replacing cell
+    updateCellUniforms();
 }
 
 void Starship::initGrid() {

@@ -127,6 +127,8 @@ EM_BOOL onMouseMove(int eventType, const EmscriptenMouseEvent* e, void* userData
     float x, y;
     browserToNormalized(e->targetX, e->targetY, x, y);
     ship.onMouseMove(x, y);
+    printf("current selected cell number: %d\n", ship.getSelectedCellId(glm::vec2(x, y)));
+    printf("position x: %f position y: %f \n", x, y);
     return EM_TRUE;
 }
 
@@ -317,13 +319,9 @@ void renderToFBO() {
     ship.drawCells();
     ship.renderCannons();
 
-    lineRenderer.draw(glm::vec2(0.0, 0.0), glm::vec2(0.5, 0.5), glm::vec4(1.0, 1.0, 0.0, 1.0), 0.05);
-    lineRenderer.draw(glm::vec2(0.0, 0.0), glm::vec2(-0.5, 0.5), glm::vec4(1.0, 0.0, 0.0, 1.0), 0.02);
-    lineRenderer.flush(glm::value_ptr(projection), 0.0f);
+    ship.drawMenuTriangle();
 
-    textRenderer.draw("Hello World", 100.0f, 500.0f, 1.0f, glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-    textRenderer.drawCentered("Centered Text", 640.0f, 360.0f, 0.5f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-    textRenderer.flush();
+    ship.draw();
 
     buttonManager.drawButtons();
 
@@ -449,60 +447,20 @@ g_aspect = (float)app.width / (float)app.height;
         });
     });
 
-    ship.setAspect((float)app.width / (float)app.height);
-    ship.initStarshipCells();
-    ship.initCellMiddlePoints();
-    ship.initGrid();
-    ship.initCellRendering();
+    buttonManager.init(&textRenderer, &renderer2d);
     lineRenderer.init();
     textRenderer.initialize("fonts/Roboto-Medium.ttf", (float)app.width, (float)app.height);
-    
     renderer2d.init();
-    renderer2d.setScreenSize( (float)app.width, (float)app.height);
-    buttonManager.init(&textRenderer, &renderer2d);
+    renderer2d.setScreenSize((float)app.width, (float)app.height);
 
-    // Create button
-    Button config;
-    config.x = 100;
-    config.y = 100;
-    config.width = 200;
-    config.height = 50;
-    config.text = "Click Me";
-    config.textScale = 0.5f;
-    config.color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);
-    config.borderRadius = 10.0f;
-    config.borderColor = glm::vec4(0.0, 0.0, 0.0, 1.0); // grey
-    config.borderWidth = 1.0;
-
-    Button* myButton = buttonManager.createButton(config);
-    buttonManager.setCallback(myButton, [](Button* btn) {
-        static bool toggle = false;
-        toggle = !toggle;
-        
-        if (toggle) {
-            btn->color = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);  // red
-        } else {
-            btn->color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);  // blue
-        }
-    });
-
-
-    /*ship.newAttackCell(Starship::CELL_ICE, 1);
-    ship.newAttackCell(Starship::CELL_ICE, 2);
-    ship.newAttackCell(Starship::CELL_FIRE, 3);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 4);
-
-    ship.newAttackCell(Starship::CELL_ICE, 6);
-    ship.newAttackCell(Starship::CELL_ICE, 7);
-
-    ship.newAttackCell(Starship::CELL_ICE, 21);
-    ship.newAttackCell(Starship::CELL_ICE, 22);
-    ship.newAttackCell(Starship::CELL_ICE, 23);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 24);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 25);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 26);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 27);
-    ship.newAttackCell(Starship::CELL_RADIOACTIVE, 28);*/
+    ship.setButtonManager(&buttonManager, &renderer2d);
+    ship.setAspect((float)app.width / (float)app.height, app.width, app.height);
+    ship.initStarshipCells();
+    ship.initCellMiddlePoints();
+    ship.initMenuTriangle();
+    ship.initGrid();
+    ship.initCellRendering();
+    ship.createMenuButtons(Starship::CELL_ATTACK);
 
     for(int i = 29; i < 34; ++i) {
             ship.newAttackCell(Starship::CELL_FIRE, i);

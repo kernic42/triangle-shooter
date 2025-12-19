@@ -9,6 +9,8 @@
 #include "Renderer2D.h"
 
 struct Button {
+    float calculatedMiddleImgX = 0;
+    float calculatedMiddleImgY = 0;
     float x = 0, y = 0;
     float width = 100, height = 40;
     std::string text;

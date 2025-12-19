@@ -2,6 +2,7 @@
 cd /d %~dp0
 call C:\Users\Nicolas\emsdk\emsdk_env.bat
 emcc -std=c++17 -O2 ^
+ -s INITIAL_MEMORY=160MB ^
  -s USE_WEBGL2=1 ^
  -s FULL_ES3=1 ^
  -s WASM=1 ^

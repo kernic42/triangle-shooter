@@ -138,7 +138,7 @@ void ButtonManager::drawButtons() {
                 float imgBoxDiff = centeringBoxWidth - button->imageWidth;
                 imagePosX = drawBoxStartX + imgBoxDiff / 2;
                 imagePosY = drawBoxStartY + centeringBoxHeight - button->imageHeight;
-                
+
                 float textBoxDiff = centeringBoxWidth - textWidth;
                 textPosX = drawBoxStartX + textBoxDiff / 2;
                 textPosY = drawBoxStartY;
@@ -168,6 +168,9 @@ void ButtonManager::drawButtons() {
                 textPosX = button->x + textBoxDiffX / 2;
                 textPosY = button->y + textBoxDiffY / 2;
             }
+
+            button->calculatedMiddleImgX = imagePosX + button->imageWidth/2.0; // set button middle image pos for getter
+            button->calculatedMiddleImgY = imagePosY + button->imageHeight/2.0;
             
             if (!button->text.empty()) {
                 textRenderer->draw(button->text, textPosX, textPosY, button->textScale, button->textColor);

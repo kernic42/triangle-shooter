@@ -7,6 +7,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/transform.hpp>
+#include "button/button.h"
+#include "Renderer2D.h"
 
 class Starship {
 public:
@@ -155,6 +157,15 @@ public:
     GLuint cellVBO = 0;
     GLuint cellAtlasTexture = 0;
     GLuint crackAtlasTexture = 0;
+    
+    // cell menu
+    GLuint cellMenuVAO = 0;
+    GLuint cellMenuVBO = 0;
+    GLuint cellMenuShader = 0;
+    GLint menuTransformsLoc, menuTexCoordsLoc, menuColorsLoc;
+    GLint menuProjectionLoc, menuShipRotationLoc;
+    GLint menuAtlasLoc, menuAtlasCrackLoc;
+    GLint menuTimeLoc, menuBorderWidthLoc;
 
     // Uniform locations
     GLint transformsLoc = -1;
@@ -182,14 +193,42 @@ public:
     float cursorX = 0;
     float cursorY = 0;
     float aspect = 0;
+    float width = 0;
+    float height = 0;
+
+    // button manager
+    ButtonManager *buttonManager;
+    Renderer2D* renderer2d;
+
+    glm::vec2 anchor;
+    float backWidth;
+    float backHeight;
+    void draw();
 
 
     Starship();
     ~Starship();
 
+    typedef struct {
+        std::vector<glm::mat4> transforms;
+        std::vector<glm::vec2> texCoords;
+        std::vector<glm::vec4> colors;
+    } cellMenu_t;
+
+    cellMenu_t cellMenu;
+
+    void updateMenuTriangle();
+    void newMenuTriangle(CellName name, int i);
+    void initMenuTriangle();
+    void drawMenuTriangle();
+    void createMenuButtons(CellCategory category);
+    void setButtonManager(ButtonManager *buttonManager, Renderer2D *renderer2d);
+
     CellTexCoords getRandomAtlasCoords(AtlasSprite sprite, int cellNumber);
+    bool isCursorInsideCell(glm::vec2 cursor, glm::vec4 v1, glm::vec4 v2, glm::vec4 v3);
+    int getSelectedCellId(glm::vec2 cursorPos);
     
-    void setAspect(float aspect);
+    void setAspect(float aspect, float width, float height);
     void updateCannonPositions();
     void initCannons();
     void renderCannons();

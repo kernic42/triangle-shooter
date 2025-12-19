@@ -144,8 +144,8 @@ void LineRenderer::flush(const float* projectionMatrix, float rotation) {
         if (dataSize > bufferCapacity) {
             glBufferData(GL_ARRAY_BUFFER, dataSize, verts.data(), GL_DYNAMIC_DRAW);
             bufferCapacity = dataSize;
-        } else {
-            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, verts.data());
+        } else {                                                         // maybe add individual transform for each line (update pos mat4 or vec2 each frame or keep static)
+            glBufferSubData(GL_ARRAY_BUFFER, 0, dataSize, verts.data()); // need a flag to set stuff to static draw(not dynamic) and not reupload vertices to buffer
         }
         
         glUniform4f(colorLoc, key.color.r, key.color.g, key.color.b, key.color.a);

@@ -265,6 +265,9 @@ EM_BOOL onResize(int eventType, const EmscriptenUiEvent* e, void* userData) {
     // Update projection matrix
     g_aspect = (float)app.width / (float)app.height;
     projection = glm::ortho(-g_aspect, g_aspect, -1.0f, 1.0f, -1.0f, 1.0f);
+    ship.screenResize(app.width, app.height);
+    renderer2d.setScreenSize(app.width, app.height);
+    textRenderer.setScreenSize(app.width, app.height);
     
     // Recreate FBO at new size
     if (app.fbo) glDeleteFramebuffers(1, &app.fbo);
@@ -318,12 +321,10 @@ void renderToFBO() {
     ship.drawGrid();
     ship.drawCells();
     ship.renderCannons();
-
-    ship.drawMenuTriangle();
-
     ship.draw();
 
     buttonManager.drawButtons();
+    ship.drawMenuTriangle();
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, app.fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, app.resolveFBO);

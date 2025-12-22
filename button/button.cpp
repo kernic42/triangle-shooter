@@ -134,7 +134,7 @@ void ButtonManager::drawButtons() {
                 float centeringBoxWidth = button->imageWidth > textWidth ? button->imageWidth : textWidth;
                 float drawBoxStartX = button->x + button->width / 2 - centeringBoxWidth / 2;
                 float drawBoxStartY = button->y + button->height / 2 - centeringBoxHeight / 2;
-                
+       
                 float imgBoxDiff = centeringBoxWidth - button->imageWidth;
                 imagePosX = drawBoxStartX + imgBoxDiff / 2;
                 imagePosY = drawBoxStartY + centeringBoxHeight - button->imageHeight;

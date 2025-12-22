@@ -157,15 +157,16 @@ public:
     GLuint cellVBO = 0;
     GLuint cellAtlasTexture = 0;
     GLuint crackAtlasTexture = 0;
+    GLuint localRotationLoc = 0;
     
     // cell menu
     GLuint cellMenuVAO = 0;
     GLuint cellMenuVBO = 0;
     GLuint cellMenuShader = 0;
-    GLint menuTransformsLoc, menuTexCoordsLoc, menuColorsLoc;
-    GLint menuProjectionLoc, menuShipRotationLoc;
-    GLint menuAtlasLoc, menuAtlasCrackLoc;
-    GLint menuTimeLoc, menuBorderWidthLoc;
+    GLuint menuTransformsLoc = 0, menuTexCoordsLoc = 0, menuColorsLoc = 0;
+    GLuint menuProjectionLoc = 0, menuShipRotationLoc = 0;
+    GLuint menuAtlasLoc = 0, menuAtlasCrackLoc = 0;
+    GLuint menuTimeLoc = 0, menuBorderWidthLoc = 0;
 
     // Uniform locations
     GLint transformsLoc = -1;
@@ -197,6 +198,7 @@ public:
     float height = 0;
 
     // button manager
+    std::vector<Button*> buttons;
     ButtonManager *buttonManager;
     Renderer2D* renderer2d;
 
@@ -217,8 +219,9 @@ public:
 
     cellMenu_t cellMenu;
 
+    void screenResize(float width, float height);
     void updateMenuTriangle();
-    void newMenuTriangle(CellName name, int i);
+    void newMenuTriangle(CellName name, int i, float x, float y);
     void initMenuTriangle();
     void drawMenuTriangle();
     void createMenuButtons(CellCategory category);

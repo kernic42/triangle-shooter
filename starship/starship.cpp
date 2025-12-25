@@ -21,7 +21,7 @@ void main() {
     fragColor = vec4(0.3, 0.8, 0.3, 1.0);
 }
 )";
-
+/*
 static const char* cellVertexShader = R"(#version 300 es
 layout(location = 0) in vec2 aPos;
 
@@ -50,8 +50,8 @@ void main() {
     vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
     gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
 }
-)";
-
+)";*/
+/*
 static const char* cellFragmentShader = R"(#version 300 es
 precision mediump float;
 
@@ -80,6 +80,106 @@ void main() {
     vec4 glow = vColor * crack * pulse;
     
     fragColor = baseColor + glow;
+}
+)";*/
+
+static const char* cursorCellVertexShader = R"(#version 300 es
+layout(location = 0) in vec2 aPos;
+
+uniform mat4 uTransforms[256];
+uniform vec2 uTexCoords[768];
+uniform vec4 uColors[256];
+
+uniform mat4 uProjection;
+uniform mat4 uLocalRotation;
+uniform mat3 uShipRotation;
+
+uniform int uCellID;
+
+out vec2 vTexCoord;
+out vec2 vLocalUV;
+out vec4 vColor;
+
+void main() {
+    mat4 model = uTransforms[uCellID];
+    vTexCoord = uTexCoords[uCellID * 3 + gl_VertexID];
+    vColor = uColors[uCellID];
+    
+    // Hardcoded local UVs for border calculation
+    if(gl_VertexID == 0) vLocalUV = vec2(0.0, 0.0);
+    else if(gl_VertexID == 1) vLocalUV = vec2(1.0, 0.0);
+    else vLocalUV = vec2(1.0, 1.0);
+    
+    vec4 localPos = model * uLocalRotation * vec4(aPos, 0.0, 1.0);
+    vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
+    gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
+}
+)";
+
+static const char* cellVertexShader = R"(#version 300 es
+layout(location = 0) in vec2 aPos;
+
+uniform mat4 uTransforms[256];
+uniform vec2 uTexCoords[768];
+uniform vec4 uColors[256];
+
+uniform mat4 uProjection;
+uniform mat4 uLocalRotation;
+uniform mat3 uShipRotation;
+
+out vec2 vTexCoord;
+out vec2 vLocalUV;
+out vec4 vColor;
+
+void main() {
+    mat4 model = uTransforms[gl_InstanceID];
+    vTexCoord = uTexCoords[gl_InstanceID * 3 + gl_VertexID];
+    vColor = uColors[gl_InstanceID];
+    
+    // Hardcoded local UVs for border calculation
+    if(gl_VertexID == 0) vLocalUV = vec2(0.0, 0.0);
+    else if(gl_VertexID == 1) vLocalUV = vec2(1.0, 0.0);
+    else vLocalUV = vec2(1.0, 1.0);
+    
+    vec4 localPos = model * uLocalRotation * vec4(aPos, 0.0, 1.0);
+    vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
+    gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
+}
+)";
+
+static const char* cellFragmentShader = R"(#version 300 es
+precision mediump float;
+
+in vec2 vTexCoord;
+in vec2 vLocalUV;
+in vec4 vColor;
+out vec4 fragColor;
+
+uniform sampler2D uAtlas;
+uniform sampler2D uCrackTex;
+uniform float uBorderWidth;
+uniform float uTime;
+
+void main() {
+    float distFromBottom = vLocalUV.y;
+    float distFromRight = 1.0 - vLocalUV.x;
+    float distFromDiagonal = (vLocalUV.x - vLocalUV.y) * 0.7071;
+    
+    float minDist = min(min(distFromBottom, distFromRight), distFromDiagonal);
+    
+    float edge = fwidth(minDist);
+    float blend = smoothstep(uBorderWidth - edge, uBorderWidth + edge, minDist);
+    
+    vec4 texColor = texture(uAtlas, vTexCoord);
+    vec4 baseColor = mix(vColor, texColor, blend);
+    
+    // Crack glow
+    float crack = texture(uCrackTex, vTexCoord).r;
+    float pulse = 0.01 + 0.08 * sin(uTime * 2.0);
+    vec4 glow = vColor * crack * pulse;
+    
+    fragColor = baseColor + glow;
+    //fragColor = vec4(vTexCoord, 0.0, 1.0);
 }
 )";
 
@@ -273,8 +373,8 @@ void Starship::initCannons() {
     float texHeight = 500.0f;
     float aspect = texWidth / texHeight;
 
-    float height = 0.027f;
-    float width = height * aspect;
+    float height = 0.030f;
+    float width = 0.027 * aspect;
 
     CannonVertex cannonQuad[] = {
         {-pivotOffset,        -height,  0.0f, 0.0f},
@@ -393,7 +493,7 @@ void Starship::drawCells() {
     
     glUseProgram(cellShader);
 
-    float borderWidth = 0.02;
+    float borderWidth = 0.012;
     glUniform1f(glGetUniformLocation(cellShader, "uBorderWidth"), borderWidth);
     
     // init with no rot
@@ -639,10 +739,10 @@ void Starship::createMenuButtons(CellCategory category) {
     float aspect = width / height;
     float firstWidth = width;
 
-    float menuWidth = 0.25;
-    float menuHeight = 0.45;
-    float menuAnchorX = 0.02;
-    float menuAnchorY = 0.02;
+    float menuWidth = 0.23;
+    float menuHeight = 0.43;
+    float menuAnchorX = 0.007;
+    float menuAnchorY = 0.01;//15;
 
     float buttonWidth = 0.09; // want button to grow width slower when width aspect is bigger
     float buttonHeight = 0.09;
@@ -650,8 +750,8 @@ void Starship::createMenuButtons(CellCategory category) {
     int btnCountPerRow = 2;
     int btnCountPerColumn = buttonCount / btnCountPerRow;
 
-    float marginLeftRight = 0.02;
-    float marginTopBottom = 0.02;
+    float marginLeftRight = 0.015;
+    float marginTopBottom = 0.015;
 
     // create button
     width /= aspect;
@@ -664,7 +764,7 @@ void Starship::createMenuButtons(CellCategory category) {
         float availableXRange = menuWidth - totalWidthRowBtns - marginLeftRight*2.0;
         float gapX = availableXRange / (btnCountPerRow-1);
 
-        float buttonX = menuAnchorX - marginLeftRight + column * (buttonWidth + gapX);
+        float buttonX = column * (buttonWidth + gapX);
         
         // row (y)
         int row = i / btnCountPerRow; // remove all row width from i, no remainder
@@ -673,33 +773,41 @@ void Starship::createMenuButtons(CellCategory category) {
         float availableYRange = menuHeight - totalHeightColumnBtns - marginTopBottom*2.0;
         float gapY = availableYRange / (btnCountPerColumn-1);
 
-        float buttonY = menuAnchorY + menuHeight - buttonHeight - marginTopBottom - row * (gapY + buttonHeight);
+        float buttonY = menuHeight - buttonHeight - row * (gapY + buttonHeight);
 
         Button config;
-        config.x = firstWidth + buttonX * width - menuWidth * width;
-        config.y = buttonY * height;
+        config.x = firstWidth + buttonX * width - menuWidth * width + marginLeftRight*width - menuAnchorX*width;
+        config.y = buttonY * height - marginTopBottom*height + menuAnchorY*height;
         config.width = buttonWidth * width;
         config.height = buttonHeight * height;
         config.text = menuItems.cellText[i];
         config.textScale = 0.55f * (height / 2000.0);
-        config.color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);
-        config.borderRadius = 20.0f * (height / 2000.0);
+        config.color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f);
+        config.borderRadius = 10.0f * (height / 2000.0);
         config.borderColor = glm::vec4(0.0, 0.0, 0.0, 1.0); // grey
         config.borderWidth = 1.0;
         config.drawImage = "top";
         config.textureId = 1; // still need to draw with img centering logic when no texture, just don't call renderer
         config.imageHeight = 0.05 * height;
-        config.imageGap = 20.0 * (height / 2000.0);
+        config.imageGap = 22.0 * (height / 2000.0);
                                                                 
         Button* myButton = buttonManager->createButton(config); // do not discard reference, when screen resize need to recreate all the buttons
-        buttonManager->setCallback(myButton, [](Button* btn) {
+        buttonManager->setCallback(myButton, [i, menuItems, this](Button* btn) {
             static bool toggle = false;
             toggle = !toggle;
             
             if (toggle) {
                 btn->color = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);  // red
+                canDrawTriangleAtCursor = true;
+                cursorCellName = menuItems.cellName[i];
+
+                printf("click in i=%d\n", i);
             } else {
-                btn->color = glm::vec4(0.2f, 0.5f, 0.8f, 1.0f);  // blue
+                btn->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f); 
+                canDrawTriangleAtCursor = false;
+                cursorCellName = menuItems.cellName[i];
+
+                printf("click out i=%d\n", i);
             }
         });
 
@@ -719,9 +827,210 @@ void Starship::createMenuButtons(CellCategory category) {
     anchor = glm::vec2(firstWidth - menuWidth * width - menuAnchorX * width, menuAnchorY * height);
 }
 
+void Starship::initTriangleAtCursor() {
+    // Create separate shader program for initTriangleAtCursor
+    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(vertexShader, 1, &cursorCellVertexShader, nullptr);
+    glShaderSource(fragmentShader, 1, &cellFragmentShader, nullptr);
+    glCompileShader(fragmentShader);
+    glCompileShader(vertexShader);
+    triangleAtCursorProgram = glCreateProgram();
+    glAttachShader(triangleAtCursorProgram, vertexShader);
+    glAttachShader(triangleAtCursorProgram, fragmentShader);
+    glLinkProgram(triangleAtCursorProgram);
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+
+    // Get uniform locations for menu shader
+    cursorTriangleTransformsLoc = glGetUniformLocation(triangleAtCursorProgram, "uTransforms");
+    cursorTriangleTexCoordsLoc = glGetUniformLocation(triangleAtCursorProgram, "uTexCoords");
+    cursorTriangleColorsLoc = glGetUniformLocation(triangleAtCursorProgram, "uColors");
+    cursorTriangleProjectionLoc = glGetUniformLocation(triangleAtCursorProgram, "uProjection");
+    cursorTriangleShipRotationLoc = glGetUniformLocation(triangleAtCursorProgram, "uShipRotation");
+    cursorTriangleAtlasLoc = glGetUniformLocation(triangleAtCursorProgram, "uAtlas");
+    cursorTriangleAtlasCrackLoc = glGetUniformLocation(triangleAtCursorProgram, "uCrackTex");
+    cursorTriangleTimeLoc = glGetUniformLocation(triangleAtCursorProgram, "uTime");
+    cursorTriangleBorderWidthLoc = glGetUniformLocation(triangleAtCursorProgram, "uBorderWidth");
+
+    // Create VAO/VBO
+    glGenVertexArrays(1, &cursorTriangleVAO);
+    glGenBuffers(1, &cursorTriangleVBO);
+
+    float half = cellSize / 3.1f;
+    float triangleVerts[] = {
+        -half - half/3.0f,  -half + half/3.0f,   // was (-half, -half)
+        half - half/3.0f,  -half + half/3.0f,   // was (half, -half)
+        half - half/3.0f,   half + half/3.0f    // was (half, half)
+    };
+
+    glBindVertexArray(cursorTriangleVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, cursorTriangleVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+
+    int menuItemCount = 8;
+    cursorTriangleCell.transforms.resize(menuItemCount);
+    cursorTriangleCell.colors.resize(menuItemCount);
+    cursorTriangleCell.texCoords.resize(menuItemCount * 3);
+
+    for(int i = 0; i < menuItemCount; ++i) {
+        CellTexCoords texCoords;
+
+        if(i % 3 == CellName::CELL_FIRE) { // % 3 because 3 options
+            texCoords = getRandomAtlasCoords(ATLAS_FIRE, 1);
+            cursorTriangleCell.colors[i] = {1.0f, 0.5f, 0.2f, 1.0f};  // orange
+        }
+        else if (i % 3 == CellName::CELL_ICE) {
+            texCoords = getRandomAtlasCoords(ATLAS_ICE, 2);
+            cursorTriangleCell.colors[i] = {0.2f, 0.6f, 1.0f, 1.0f};  // blue
+        }
+        else if(i % 3 == CellName::CELL_RADIOACTIVE) {
+            texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, 3);
+            cursorTriangleCell.colors[i] = {0.2f, 1.0f, 0.2f, 1.0f};  // green
+        }
+
+        cursorTriangleCell.texCoords[i * 3 + 0] = glm::vec2(texCoords.u0, texCoords.v0);
+        cursorTriangleCell.texCoords[i * 3 + 1] = glm::vec2(texCoords.u1, texCoords.v1);
+        cursorTriangleCell.texCoords[i * 3 + 2] = glm::vec2(texCoords.u2, texCoords.v2);
+
+        // set this setting to 0 for all triangleAtCursor
+        cursorTriangleCell.transforms[i] = glm::mat4(1.0);
+    }
+
+    glUseProgram(triangleAtCursorProgram);
+
+    // set program uniform arrays (color transform texCoord ect)
+    glBindVertexArray(cursorTriangleVAO);
+    glUniformMatrix4fv(cursorTriangleTransformsLoc, cursorTriangleCell.transforms.size(), GL_FALSE,  glm::value_ptr(cursorTriangleCell.transforms[0]));
+    glUniform2fv(cursorTriangleTexCoordsLoc, cursorTriangleCell.texCoords.size(),  glm::value_ptr(cursorTriangleCell.texCoords[0]));
+    glUniform4fv(cursorTriangleColorsLoc, cursorTriangleCell.colors.size(),  glm::value_ptr(cursorTriangleCell.colors[0]));
+}
+
+void Starship::drawTriangleAtCursor() {
+    int triangleStart = this->cursorCellName * 3;
+
+    if(this->canDrawTriangleAtCursor) {
+        glUseProgram(triangleAtCursorProgram);
+
+        // set cellID to draw at cursor(which cell)
+        glUniform1i(glGetUniformLocation(triangleAtCursorProgram, "uCellID"), this->cursorCellName);
+
+        // set translation under cursor
+        printf("cursorX: %f\n", cursorX);
+        printf("cursorX * aspect: %f\n", cursorX * aspect);
+        glm::mat4 translation = glm::translate(glm::mat4(1.0), glm::vec3(cursorX * aspect, cursorY, 0.0));
+        glUniformMatrix4fv(glGetUniformLocation(triangleAtCursorProgram, "uLocalRotation"), 1, GL_FALSE, glm::value_ptr(translation));
+
+        // Set proj
+        glUniformMatrix4fv(cursorTriangleProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+        // no rotation for (all) cursor cells
+        float borderWidth = 0.02; /// put in header
+        float currentTime = emscripten_get_now() / 1000.0f;
+        glUniformMatrix3fv(cursorTriangleShipRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat3(1.0f)));
+        glUniform1f(cursorTriangleBorderWidthLoc, borderWidth);
+        glUniform1f(cursorTriangleTimeLoc, currentTime);
+
+        // Bind atlas
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, cellAtlasTexture);
+        glUniform1i(cursorTriangleAtlasLoc, 0);
+
+        // Bind crack atlas
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, crackAtlasTexture);
+        glUniform1i(cursorTriangleAtlasCrackLoc, 1);
+
+        glBindVertexArray(cursorTriangleVAO); // this is not registerd into the program like uniforms, just vbo data
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 3, 1);
+
+        glBindVertexArray(0);
+    }
+}
+
+void Starship::updateMenuTriangle() {
+    glUseProgram(cellMenuShader);
+    glBindVertexArray(cellMenuVAO);
+    
+    glUniformMatrix4fv(transformsLoc, cellMenu.transforms.size(), GL_FALSE,  glm::value_ptr(cellMenu.transforms[0]));
+    glUniform2fv(texCoordsLoc, cellMenu.texCoords.size(),  glm::value_ptr(cellMenu.texCoords[0]));
+    glUniform4fv(colorsLoc, cellMenu.colors.size(),  glm::value_ptr(cellMenu.colors[0]));
+}
+
+void Starship::newMenuTriangle(CellName name, int i, float x, float y) { // if I do i too far all data inbetween is corrupted and unitialized
+    if(cellMenu.transforms.size() <= i) cellMenu.transforms.resize(i+1);
+    if(cellMenu.colors.size() <= i) cellMenu.colors.resize(i+1);
+    if(cellMenu.texCoords.size() <= i * 3) cellMenu.texCoords.resize((i+1) * 3);
+
+    CellTexCoords texCoords;
+
+    if(name == CellName::CELL_FIRE) {
+        texCoords = getRandomAtlasCoords(ATLAS_FIRE, i);
+        cellMenu.colors[i] = {1.0f, 0.5f, 0.2f, 1.0f};  // orange
+    }
+    else if (name == CellName::CELL_ICE) {
+       texCoords = getRandomAtlasCoords(ATLAS_ICE, i);
+        cellMenu.colors[i] = {0.2f, 0.6f, 1.0f, 1.0f};  // blue
+    }
+    else if(name == CellName::CELL_RADIOACTIVE) {
+        texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, i);
+        cellMenu.colors[i] = {0.2f, 1.0f, 0.2f, 1.0f};  // green
+    }
+
+    cellMenu.texCoords[i * 3 + 0] = glm::vec2(texCoords.u0, texCoords.v0);
+    cellMenu.texCoords[i * 3 + 1] = glm::vec2(texCoords.u1, texCoords.v1);
+    cellMenu.texCoords[i * 3 + 2] = glm::vec2(texCoords.u2, texCoords.v2);
+
+    cellMenu.transforms[i] = glm::translate(glm::mat4(1), glm::vec3(x, y, 0.0));
+
+    updateMenuTriangle();
+}
+
+void Starship::drawMenuTriangle() {
+    glDisable(GL_BLEND);
+    glUseProgram(cellMenuShader);
+
+    float borderWidth = 0.02; /// put in header
+    float currentTime = emscripten_get_now() / 1000.0f;
+    
+    // set rot
+    glm::mat4 rot = glm::rotate(glm::mat4(1.0), glm::radians(currentTime * 20.0f), glm::vec3(0.0, 0.0, 1.0));
+    glUniformMatrix4fv(localRotationLoc, 1, GL_FALSE, glm::value_ptr(rot));
+
+    // Set proj
+    //glm::mat4 noProj = glm::mat4(1.0f);
+    glUniformMatrix4fv(menuProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glUniformMatrix3fv(menuShipRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat3(1.0f))); // no rotation for menu
+    glUniform1f(menuBorderWidthLoc, borderWidth);
+    glUniform1f(menuTimeLoc, currentTime);
+
+    // Bind atlas
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, cellAtlasTexture);
+    glUniform1i(atlasLoc, 0);
+
+    // Bind crack atlas
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, crackAtlasTexture);
+    glUniform1i(atlasCrackLoc, 1);
+
+    // draw with vao that contains triangles for menu
+    glBindVertexArray(cellMenuVAO);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cellMenu.transforms.size());
+
+    glBindVertexArray(0);
+}
+
 void Starship::screenResize(float width, float height) {
     this->width = width;
     this->height = height;
+    this->aspect = width / height;
 
     for(int i = 0; i < buttons.size(); ++i) {
         buttonManager->removeButton(buttons[i]);
@@ -733,7 +1042,8 @@ void Starship::screenResize(float width, float height) {
 }
 
 void Starship::draw() {
-    renderer2d->drawRect(anchor, backWidth, backHeight, 1.0, glm::vec4(1.0, 0.0, 0.0, 1.0));
+    renderer2d->drawFilledRoundedRect(anchor, backWidth, backHeight, 12.0f * (height / 2000.0), glm::vec4(27.0/255.0, 27.0/255.0, 27.0/255.0, 1.0));
+    renderer2d->drawRoundedRect(anchor, backWidth, backHeight, 1.0, 12.0f * (height / 2000.0), glm::vec4(0.0, 0.0, 0.0, 1.0));
 }
 
 void Starship::initMenuTriangle() {
@@ -766,7 +1076,7 @@ void Starship::initMenuTriangle() {
     glGenVertexArrays(1, &cellMenuVAO);
     glGenBuffers(1, &cellMenuVBO);
 
-    float half = cellSize / 3.0f;
+    float half = cellSize / 3.1f;
     float triangleVerts[] = {
         -half - half/3.0f,  -half + half/3.0f,   // was (-half, -half)
         half - half/3.0f,  -half + half/3.0f,   // was (half, -half)
@@ -779,82 +1089,6 @@ void Starship::initMenuTriangle() {
 
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
-
-    glBindVertexArray(0);
-}
-
-void Starship::updateMenuTriangle() {
-    glUseProgram(cellMenuShader);
-    glBindVertexArray(cellMenuVAO);
-    
-    glUniformMatrix4fv(transformsLoc, cellMenu.transforms.size(), GL_FALSE,  glm::value_ptr(cellMenu.transforms[0]));
-    glUniform2fv(texCoordsLoc, cellMenu.texCoords.size() * 3,  glm::value_ptr(cellMenu.texCoords[0]));
-    glUniform4fv(colorsLoc, cellMenu.colors.size(),  glm::value_ptr(cellMenu.colors[0]));
-}
-
-void Starship::newMenuTriangle(CellName name, int i, float x, float y) { // if I do i too far all data inbetween is corrupted and unitialized
-    if(cellMenu.transforms.size() <= i) cellMenu.transforms.resize(i+1);
-    if(cellMenu.colors.size() <= i) cellMenu.colors.resize(i+1);
-    if(cellMenu.texCoords.size() <= i * 3) cellMenu.texCoords.resize((i+1) * 3);
-
-    CellTexCoords texCoords;
-
-    if(name == CellName::CELL_FIRE) {
-        texCoords = getRandomAtlasCoords(ATLAS_FIRE, i);
-        printf("1\n");
-    }
-    else if (name == CellName::CELL_ICE) {
-       texCoords = getRandomAtlasCoords(ATLAS_ICE, i);
-       printf("2\n");
-    }
-    else if(name == CellName::CELL_RADIOACTIVE) {
-        texCoords = getRandomAtlasCoords(ATLAS_RADIOACTIVE, i);
-        printf("3\n");
-    }
-
-    cellMenu.texCoords[i * 3 + 0] = glm::vec2(texCoords.u0, texCoords.v0);
-    cellMenu.texCoords[i * 3 + 1] = glm::vec2(texCoords.u1, texCoords.v1);
-    cellMenu.texCoords[i * 3 + 2] = glm::vec2(texCoords.u2, texCoords.v2);
-
-    cellMenu.transforms[i] = glm::translate(glm::mat4(1), glm::vec3(x, y, 0.0));
-    
-    cellMenu.colors[i] = glm::vec4(1.0, 1.0, 1.0, 1.0);
-
-    updateMenuTriangle();
-}
-
-void Starship::drawMenuTriangle() {
-    glDisable(GL_BLEND);
-    glUseProgram(cellMenuShader);
-
-    float borderWidth = 0.02; /// put in header
-    float currentTime = emscripten_get_now() / 1000.0f;
-
-    // set rot
-    glm::mat4 rot = glm::rotate(glm::mat4(1.0), glm::radians(currentTime * 20.0f), glm::vec3(0.0, 0.0, 1.0));
-    glUniformMatrix4fv(localRotationLoc, 1, GL_FALSE, glm::value_ptr(rot));
-
-    // Set proj
-    //glm::mat4 noProj = glm::mat4(1.0f);
-    glUniformMatrix4fv(menuProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-    glUniformMatrix3fv(menuShipRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat3(1.0f))); // no rotation for menu
-    glUniform1f(menuBorderWidthLoc, borderWidth);
-    glUniform1f(menuTimeLoc, currentTime);
-
-    // Bind atlas
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cellAtlasTexture);
-    glUniform1i(atlasLoc, 0);
-
-    // Bind crack atlas
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, crackAtlasTexture);
-    glUniform1i(atlasCrackLoc, 1);
-
-    // draw with vao that contains triangles for menu
-    glBindVertexArray(cellMenuVAO);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cellMenu.transforms.size());
 
     glBindVertexArray(0);
 }

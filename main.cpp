@@ -127,8 +127,6 @@ EM_BOOL onMouseMove(int eventType, const EmscriptenMouseEvent* e, void* userData
     float x, y;
     browserToNormalized(e->targetX, e->targetY, x, y);
     ship.onMouseMove(x, y);
-    printf("current selected cell number: %d\n", ship.getSelectedCellId(glm::vec2(x, y)));
-    printf("position x: %f position y: %f \n", x, y);
     return EM_TRUE;
 }
 
@@ -213,13 +211,21 @@ void initFBO() {
 void updateFBOTextureUV() {
     glUseProgram(app.quadProgram);
 
-    float tileScale = 0.5;
-    float tileWidth = 208.0 * tileScale;
-    float tileHeight = 138.0 * tileScale;
+    float tileWidth = 208.0;
+    float tileHeight = 138.0;
 
-    float tileCountX = (float)app.width / tileWidth;   // how many cells fit over width
-    float tileCountY = (float)app.height / tileHeight; // how many cells fit over height
-    
+    // we want to fit 10 tiles for height
+    float tileCountY = 16.0;
+
+    // figure out 0.8 height is how much width 1.0 to keep same cell aspect
+    float tileAspect = tileWidth / tileHeight;
+
+    // then need to figure out how much is screen height compared to screen width
+    float screenAspect = app.width / (float)app.height;
+
+    // check how many tiles can fit, following the same aspect ratio, over width
+    float tileCountX = tileCountY / tileAspect * screenAspect;
+
     float offsetX = -fmod(tileCountX, 1.0) / 2.0 +        // offset by the fraction that cell takes
                     ((int)floor(tileCountX)+1) % 2 * 0.5; // cell count that fits is even(without remainder), then do + half offset
 
@@ -240,20 +246,6 @@ void updateFBOTextureUV() {
     glBindVertexArray(app.quadVAO);
     glBindBuffer(GL_ARRAY_BUFFER, app.quadVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-    /*    float imgWidth = 208;
-    float imgHeight = 138;
-    float aspect = imgWidth / imgHeight;
-
-    float height = 1.0 * aspect;
-    float width = 1.0  * g_aspect;
-    //printf("g_aspect: %f\n", g_aspect);
-    printf("aspect: %f\n", aspect);
-
-    float multiplyFactor = 11.0f;
-
-    float tileHeight = height * multiplyFactor;
-    float tileWidth = width * multiplyFactor;*/
 }
 
 EM_BOOL onResize(int eventType, const EmscriptenUiEvent* e, void* userData) {
@@ -322,6 +314,7 @@ void renderToFBO() {
     ship.drawCells();
     ship.renderCannons();
     ship.draw();
+    ship.drawTriangleAtCursor();
 
     buttonManager.drawButtons();
     ship.drawMenuTriangle();
@@ -480,6 +473,7 @@ g_aspect = (float)app.width / (float)app.height;
     }
 
     ship.initCannons();
+    ship.initTriangleAtCursor();
 
 
     // Register mouse events

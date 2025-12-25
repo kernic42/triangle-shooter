@@ -218,10 +218,34 @@ public:
     } cellMenu_t;
 
     cellMenu_t cellMenu;
+    cellMenu_t cursorTriangleCell;
+
+    GLuint triangleAtCursorProgram = 0;
+
+    GLuint cursorTriangleTransformsLoc = 0;
+    GLuint cursorTriangleTexCoordsLoc = 0;
+    GLuint cursorTriangleColorsLoc = 0;
+    GLuint cursorTriangleProjectionLoc = 0;
+    GLuint cursorTriangleShipRotationLoc = 0;
+    GLuint cursorTriangleAtlasLoc = 0;
+    GLuint cursorTriangleAtlasCrackLoc = 0;
+    GLuint cursorTriangleTimeLoc = 0;
+    GLuint cursorTriangleBorderWidthLoc = 0;
+
+    GLuint cursorTriangleVAO = 0;
+    GLuint cursorTriangleVBO = 0;
+
+    bool canDrawTriangleAtCursor = false;
+    CellName cursorCellName;
 
     void screenResize(float width, float height);
     void updateMenuTriangle();
+
+    void drawTriangleAtCursor();
+    void updateCursorTriangle();
+
     void newMenuTriangle(CellName name, int i, float x, float y);
+    void initTriangleAtCursor();
     void initMenuTriangle();
     void drawMenuTriangle();
     void createMenuButtons(CellCategory category);
@@ -233,8 +257,8 @@ public:
     
     void setAspect(float aspect, float width, float height);
     void updateCannonPositions();
-    void initCannons();
     void renderCannons();
+    void initCannons();
     void initCellMiddlePoints();
     void initStarshipCells();
 

@@ -64,7 +64,11 @@ public:
         CELL_HOMING_MISSILE,
         CELL_AREA_DENIAL_MINE,
         CELL_STEAM_LASER,
-        CELL_SWITCH_BLASTER
+        CELL_SWITCH_BLASTER,
+
+        // None
+        CELL_NONE,
+        UNFOCUSED_MENU
     };
 
     struct DefenseData {
@@ -235,8 +239,16 @@ public:
     GLuint cursorTriangleVAO = 0;
     GLuint cursorTriangleVBO = 0;
 
-    bool canDrawTriangleAtCursor = false;
-    CellName cursorCellName;
+    typedef struct {
+        bool canDrawTriangleAtCursor = false;
+        CellName type  = CELL_NONE;
+        int cannonCount = 0;
+        int buttonId = -1;
+    } menuCursorSelection;
+    
+    menuCursorSelection menuCursorSelect;
+    int energy = 10000;
+
 
     void screenResize(float width, float height);
     void updateMenuTriangle();
@@ -254,6 +266,9 @@ public:
     CellTexCoords getRandomAtlasCoords(AtlasSprite sprite, int cellNumber);
     bool isCursorInsideCell(glm::vec2 cursor, glm::vec4 v1, glm::vec4 v2, glm::vec4 v3);
     int getSelectedCellId(glm::vec2 cursorPos);
+    bool placeCell(glm::vec2 cursorPos);
+    bool neighborsAlive(int cellId);
+    int getPrice(Starship::CellName type, int cannonCount);
     
     void setAspect(float aspect, float width, float height);
     void updateCannonPositions();

@@ -456,7 +456,7 @@ g_aspect = (float)app.width / (float)app.height;
     ship.initCellRendering();
     ship.createMenuButtons(Starship::CELL_ATTACK);
 
-    for(int i = 29; i < 34; ++i) {
+   /* for(int i = 29; i < 34; ++i) {
             ship.newAttackCell(Starship::CELL_FIRE, i);
     }
 
@@ -470,7 +470,9 @@ g_aspect = (float)app.width / (float)app.height;
 
     for(int i = 139; i < 164; ++i) {
             ship.newAttackCell(Starship::CELL_RADIOACTIVE, i);
-    }
+    }*/
+
+    ship.newAttackCell(Starship::CELL_FIRE, 8);
 
     ship.initCannons();
     ship.initTriangleAtCursor();

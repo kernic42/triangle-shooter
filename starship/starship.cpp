@@ -86,9 +86,9 @@ void main() {
 static const char* cursorCellVertexShader = R"(#version 300 es
 layout(location = 0) in vec2 aPos;
 
-uniform mat4 uTransforms[256];
-uniform vec2 uTexCoords[768];
-uniform vec4 uColors[256];
+uniform mat4 uTransforms[128];
+uniform vec2 uTexCoords[384];
+uniform vec4 uColors[128];
 
 uniform mat4 uProjection;
 uniform mat4 uLocalRotation;
@@ -119,9 +119,9 @@ void main() {
 static const char* cellVertexShader = R"(#version 300 es
 layout(location = 0) in vec2 aPos;
 
-uniform mat4 uTransforms[256];
-uniform vec2 uTexCoords[768];
-uniform vec4 uColors[256];
+uniform mat4 uTransforms[128];
+uniform vec2 uTexCoords[384];
+uniform vec4 uColors[128];
 
 uniform mat4 uProjection;
 uniform mat4 uLocalRotation;
@@ -646,8 +646,10 @@ int Starship::getSelectedCellId(glm::vec2 cursorPos) {
         glm::vec4 vert3 = projection * shipRotation * cells[i].transform * triangleVerts[2];
 
         // if cursor is inside these triangleVerts, return id of cell
-        if(isCursorInsideCell(cursorPos, vert1, vert2, vert3))
+        if(isCursorInsideCell(cursorPos, vert1, vert2, vert3)){
+            printf("cells[i].cellNumber: %d\n", cells[i].cellNumber);
             return cells[i].cellNumber;
+        }
     }
 
     return -1; // cursor wasn't inside any cell
@@ -658,7 +660,7 @@ void Starship::initStarshipCells() {
 
     cells.resize(0);
 
-    for(int i = 1; i < totalTriangles + 1; ++i) {
+    for(int i = 0; i < totalTriangles; ++i) {
         int cellNumber = i;
 
         TriangleCell newCell;
@@ -666,7 +668,7 @@ void Starship::initStarshipCells() {
         newCell.cellNumber = cellNumber;
 
         // calculate x,y translate (row column) via cellNumber over grid
-        int pairIndex = (cellNumber - 1) / 2; // which square cell
+        int pairIndex = (cellNumber) / 2; // which square cell
         int row = pairIndex / gridWidth;
         int column = pairIndex % gridWidth;
 
@@ -676,7 +678,7 @@ void Starship::initStarshipCells() {
 
         glm::mat4 translate = glm::translate(glm::mat4(1.0f), glm::vec3(newCell.x, newCell.y, 0.0f));
         glm::mat4 rotate = glm::mat4(1.0f);
-        if(cellNumber % 2 == 1) {
+        if(cellNumber % 2 == 0) {
             rotate = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         }
 
@@ -793,21 +795,24 @@ void Starship::createMenuButtons(CellCategory category) {
                                                                 
         Button* myButton = buttonManager->createButton(config); // do not discard reference, when screen resize need to recreate all the buttons
         buttonManager->setCallback(myButton, [i, menuItems, this](Button* btn) {
-            static bool toggle = false;
-            toggle = !toggle;
-            
-            if (toggle) {
-                btn->color = glm::vec4(0.8f, 0.2f, 0.2f, 1.0f);  // red
-                canDrawTriangleAtCursor = true;
-                cursorCellName = menuItems.cellName[i];
+            // reset all buttons state to normal color
+            for(int i = 0; i < this->buttons.size(); ++i) {
+                this->buttons[i]->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f); // default color
+            }
 
-                printf("click in i=%d\n", i);
-            } else {
-                btn->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f); 
-                canDrawTriangleAtCursor = false;
-                cursorCellName = menuItems.cellName[i];
-
-                printf("click out i=%d\n", i);
+            if(menuCursorSelect.buttonId != i) { // the id of the previous clicked button is different than the id of this button
+                // change selected triangle cell state for this i
+                btn->color = glm::vec4(14.0/255.0, 11.0/255.0, 11.0/255.0, 1.0f);  // redish
+                menuCursorSelect.canDrawTriangleAtCursor = true;
+                menuCursorSelect.type = menuItems.cellName[i];
+                menuCursorSelect.cannonCount = 1;
+                menuCursorSelect.buttonId = i;
+            }
+            else { // menuCursorSelect.type == menuItems.cellName[i]
+                btn->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f); // default color
+                menuCursorSelect.type = CELL_NONE;
+                menuCursorSelect.canDrawTriangleAtCursor = false;
+                menuCursorSelect.buttonId = -1;
             }
         });
 
@@ -818,7 +823,6 @@ void Starship::createMenuButtons(CellCategory category) {
         float middleImgX = myButton->calculatedMiddleImgX; // set button middle image pos for getter
         float middleImgY = myButton->calculatedMiddleImgY;
         
-        printf("middleImgX: %f, middleImgY: %f \n",  (middleImgX / firstWidth * 2.0) - 1.0, middleImgY / height * 2.0 - 1.0);
         newMenuTriangle(menuItems.cellName[i], i, ((middleImgX / firstWidth * 2.0) - 1.0) * aspect, middleImgY / height * 2.0 - 1.0);
     }
 
@@ -827,18 +831,128 @@ void Starship::createMenuButtons(CellCategory category) {
     anchor = glm::vec2(firstWidth - menuWidth * width - menuAnchorX * width, menuAnchorY * height);
 }
 
+bool Starship::neighborsAlive(int cellId) {
+    bool canPlaceCell = false;
+
+    bool livingCellLeft = false;
+    bool livingCellRight = false;
+    bool livingCellTop = false;
+    bool livingCellBottom = false;
+
+    int topId = cellId - gridWidth*2 + 1; // get back 1 row from same id
+    int bottomId = cellId + gridWidth*2 - 1; // get front 1 row from same id
+    if(cellId-1 <= cells.size()) livingCellLeft = cells[cellId-1].cellAlive; 
+    if(cellId+1 > 0) livingCellRight = cells[cellId+1].cellAlive;
+    if(topId > 0) livingCellTop = cells[topId].cellAlive;
+    if(bottomId <= cells.size()) livingCellBottom = cells[bottomId].cellAlive;
+
+    if(cellId % 2 == 0) canPlaceCell = livingCellLeft || livingCellRight || livingCellTop; // can place cell if a living cell is left, bottom, or right to cell
+    if(cellId % 2 == 1) canPlaceCell = livingCellLeft || livingCellRight || livingCellBottom; // can place cell if a living cell is left, top, or right to cell
+
+    return canPlaceCell;
+}
+
+int Starship::getPrice(Starship::CellName type, int cannonCount) {
+    const int maxCannon = 5;
+    if(cannonCount > maxCannon) return -1;
+    if(cannonCount < 1) return -1;
+
+    float multiplyFactor[maxCannon] = { 1.0, 2.5, 4.0, 6.0, 8.0 };
+
+    int price = 0;
+    if(type == CellName::CELL_FIRE) price = 500 * multiplyFactor[cannonCount-1];
+    else if(type == CellName::CELL_ICE) price = 600 * multiplyFactor[cannonCount-1];
+    else if(type == CellName::CELL_RADIOACTIVE) price = 700 * multiplyFactor[cannonCount-1];
+
+    return price;
+}
+
+bool Starship::placeCell(glm::vec2 cursorPos) { // when user clicks
+    int cellId = getSelectedCellId(cursorPos);
+
+    // if user interacts with menu, do not do anything
+    float cursorX = (cursorPos.x+1.0)/2.0 * width;
+    float cursorY = (cursorPos.y+1.0)/2.0 * height;
+    bool insideMenu = anchor.x < cursorX && cursorX < anchor.x + backWidth &&
+                      anchor.y < cursorY && cursorY < anchor.y + backHeight;
+    if(insideMenu) return false;
+
+    // get cell id, if outside ship && outside menu, just click out of menu
+    if(cellId == -1 && !insideMenu) {
+        // unselect clicked state
+        menuCursorSelect.canDrawTriangleAtCursor = false;
+        menuCursorSelect.type = CELL_NONE;
+        menuCursorSelect.buttonId = -1;
+
+        // reset buttons color(unselect button)
+        for(int i = 0; i < buttons.size(); ++i)
+            buttons[i]->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f);
+
+        // couldn't place cell..
+        return false;
+    }
+
+    // if inside cell, check if player has enough energy to buy it & at least 1 neighbors exist
+    Starship::CellName type = menuCursorSelect.type;
+    int cannonCount = menuCursorSelect.cannonCount;
+
+    if(energy < getPrice(type, cannonCount)) { // not enough energy
+        // eventPopup(enum::warningSign, "not enough energy");
+        printf("not enough energy\n");
+        return false;
+    }
+
+    if(!neighborsAlive(cellId)) { // not even 1 neighbors is alive
+        // eventPopup(enum::warningSign, "place cell next to neighboring cell");
+        printf("place cell next to neighboring cell\n");
+        return false;
+    }
+
+    energy -= getPrice(type, cannonCount);
+    printf("energy -= getPrice %d:\n", energy);
+    newAttackCell(type, cellId);
+    return true;
+}
+
 void Starship::initTriangleAtCursor() {
-    // Create separate shader program for initTriangleAtCursor
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(vertexShader, 1, &cursorCellVertexShader, nullptr);
     glShaderSource(fragmentShader, 1, &cellFragmentShader, nullptr);
-    glCompileShader(fragmentShader);
+
     glCompileShader(vertexShader);
+    GLint success;
+    char infoLog[512];
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+    if (success) {
+        printf("Vertex shader compiled OK\n");
+    } else {
+        glGetShaderInfoLog(vertexShader, 512, nullptr, infoLog);
+        printf("Vertex shader error: %s\n", infoLog);
+    }
+
+    glCompileShader(fragmentShader);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+    if (success) {
+        printf("Fragment shader compiled OK\n");
+    } else {
+        glGetShaderInfoLog(fragmentShader, 512, nullptr, infoLog);
+        printf("Fragment shader error: %s\n", infoLog);
+    }
+
     triangleAtCursorProgram = glCreateProgram();
     glAttachShader(triangleAtCursorProgram, vertexShader);
     glAttachShader(triangleAtCursorProgram, fragmentShader);
     glLinkProgram(triangleAtCursorProgram);
+
+    glGetProgramiv(triangleAtCursorProgram, GL_LINK_STATUS, &success);
+    if (success) {
+        printf("Program linked OK\n");
+    } else {
+        glGetProgramInfoLog(triangleAtCursorProgram, 512, nullptr, infoLog);
+        printf("Program link error: %s\n", infoLog);
+    }
+
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 
@@ -912,17 +1026,15 @@ void Starship::initTriangleAtCursor() {
 }
 
 void Starship::drawTriangleAtCursor() {
-    int triangleStart = this->cursorCellName * 3;
+    int triangleStart = menuCursorSelect.type * 3;
 
-    if(this->canDrawTriangleAtCursor) {
+    if(menuCursorSelect.canDrawTriangleAtCursor) {
         glUseProgram(triangleAtCursorProgram);
 
         // set cellID to draw at cursor(which cell)
-        glUniform1i(glGetUniformLocation(triangleAtCursorProgram, "uCellID"), this->cursorCellName);
+        glUniform1i(glGetUniformLocation(triangleAtCursorProgram, "uCellID"), menuCursorSelect.type);
 
         // set translation under cursor
-        printf("cursorX: %f\n", cursorX);
-        printf("cursorX * aspect: %f\n", cursorX * aspect);
         glm::mat4 translation = glm::translate(glm::mat4(1.0), glm::vec3(cursorX * aspect, cursorY, 0.0));
         glUniformMatrix4fv(glGetUniformLocation(triangleAtCursorProgram, "uLocalRotation"), 1, GL_FALSE, glm::value_ptr(translation));
 
@@ -1095,7 +1207,7 @@ void Starship::initMenuTriangle() {
 
 void Starship::newAttackCell(CellName name, int cellNumber) {
     TriangleCell newCell;
-    newCell = cells[cellNumber-1]; // get back old state, keep basic fields..
+    newCell = cells[cellNumber]; // get back old state, keep basic fields..
     newCell.category = CellCategory::CELL_ATTACK;
     newCell.name = name;
     newCell.cellAlive = true;
@@ -1127,6 +1239,7 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
 
     // Update uniforms after adding/replacing cell
     updateCellUniforms();
+    updateCannonPositions();
 }
 
 void Starship::initGrid() {
@@ -1229,6 +1342,15 @@ void Starship::onMouseDown(int button, float x, float y) {
         
         // Store starting angle from center to mouse
         dragStartX = atan2f(y - centerY, x - centerX);
+    }
+
+    if(button == 0) { // left click
+        if(menuCursorSelect.canDrawTriangleAtCursor) {
+            bool couldPurchase = placeCell(glm::vec2(x, y));
+
+            if(couldPurchase) printf("could purchase cell, remaing energy: %d\n", energy);
+            else printf("could NOT purchase cell, remaing energy: %d\n", energy);
+        }
     }
 }
 

@@ -125,65 +125,66 @@ void ButtonManager::drawButtons() {
         float textWidth, textHeight, textAscent, textDescent;
         textRenderer->getStringMetrics(button->text, button->textScale, textWidth, textHeight, textAscent, textDescent);
         
-        if (button->textureId != 0) {
-            float textPosX, textPosY;
-            float imagePosX, imagePosY;
-            
-            if (button->drawImage == "top") {
-                float centeringBoxHeight = button->imageHeight + textHeight + button->imageGap;
-                float centeringBoxWidth = button->imageWidth > textWidth ? button->imageWidth : textWidth;
-                float drawBoxStartX = button->x + button->width / 2 - centeringBoxWidth / 2;
-                float drawBoxStartY = button->y + button->height / 2 - centeringBoxHeight / 2;
-       
-                float imgBoxDiff = centeringBoxWidth - button->imageWidth;
-                imagePosX = drawBoxStartX + imgBoxDiff / 2;
-                imagePosY = drawBoxStartY + centeringBoxHeight - button->imageHeight;
+        float textPosX, textPosY;
+        float imagePosX, imagePosY;
+        
+        if (button->drawImage == "top") {
+            float centeringBoxHeight = button->imageHeight + textHeight + button->imageGap;
+            float centeringBoxWidth = button->imageWidth > textWidth ? button->imageWidth : textWidth;
+            float drawBoxStartX = button->x + button->width / 2 - centeringBoxWidth / 2;
+            float drawBoxStartY = button->y + button->height / 2 - centeringBoxHeight / 2;
+    
+            float imgBoxDiff = centeringBoxWidth - button->imageWidth;
+            imagePosX = drawBoxStartX + imgBoxDiff / 2;
+            imagePosY = drawBoxStartY + centeringBoxHeight - button->imageHeight;
 
-                float textBoxDiff = centeringBoxWidth - textWidth;
-                textPosX = drawBoxStartX + textBoxDiff / 2;
-                textPosY = drawBoxStartY;
-            }
-            else if (button->drawImage == "left") {
-                float centeringBoxHeight = button->imageHeight > textHeight ? button->imageHeight : textHeight;
-                float centeringBoxWidth = button->imageWidth + textWidth + button->imageGap;
-                float drawBoxStartX = button->x + button->width / 2 - centeringBoxWidth / 2;
-                float drawBoxStartY = button->y + button->height / 2 - centeringBoxHeight / 2;
-                
-                float imgBoxDiff = centeringBoxHeight - button->imageHeight;
-                imagePosX = drawBoxStartX;
-                imagePosY = drawBoxStartY + imgBoxDiff / 2;
-                
-                float textBoxDiff = centeringBoxHeight - textHeight;
-                textPosX = drawBoxStartX + centeringBoxWidth - textWidth;
-                textPosY = drawBoxStartY + textBoxDiff / 2;
-            }
-            else { // "center"
-                float imgBoxDiffX = button->width - button->imageWidth;
-                float imgBoxDiffY = button->height - button->imageHeight;
-                imagePosX = button->x + imgBoxDiffX / 2;
-                imagePosY = button->y + imgBoxDiffY / 2;
-                
-                float textBoxDiffX = button->width - textWidth;
-                float textBoxDiffY = button->height - textHeight;
-                textPosX = button->x + textBoxDiffX / 2;
-                textPosY = button->y + textBoxDiffY / 2;
-            }
-
-            button->calculatedMiddleImgX = imagePosX + button->imageWidth/2.0; // set button middle image pos for getter
-            button->calculatedMiddleImgY = imagePosY + button->imageHeight/2.0;
-            
-            if (!button->text.empty()) {
-                textRenderer->draw(button->text, textPosX, textPosY, button->textScale, button->textColor);
-            }
-            
-            renderer2d->drawImage(button->textureId, imagePosX, imagePosY, button->imageWidth, button->imageHeight);
+            float textBoxDiff = centeringBoxWidth - textWidth;
+            textPosX = drawBoxStartX + textBoxDiff / 2;
+            textPosY = drawBoxStartY;
         }
-        else {
-            float textPosX = (button->x + button->width / 2) - textWidth / 2;
-            float textPosY = (button->y + button->height / 2) - textHeight / 2;
+        else if (button->drawImage == "left") {
+            float centeringBoxHeight = button->imageHeight > textHeight ? button->imageHeight : textHeight;
+            float centeringBoxWidth = button->imageWidth + textWidth + button->imageGap;
+            float drawBoxStartX = button->x + button->width / 2 - centeringBoxWidth / 2;
+            float drawBoxStartY = button->y + button->height / 2 - centeringBoxHeight / 2;
             
+            float imgBoxDiff = centeringBoxHeight - button->imageHeight;
+            imagePosX = drawBoxStartX;
+            imagePosY = drawBoxStartY + imgBoxDiff / 2;
+            
+            float textBoxDiff = centeringBoxHeight - textHeight;
+            textPosX = drawBoxStartX + centeringBoxWidth - textWidth;
+            textPosY = drawBoxStartY + textBoxDiff / 2;
+        }
+        else if(button->drawImage == "center") { // "center"
+            float imgBoxDiffX = button->width - button->imageWidth;
+            float imgBoxDiffY = button->height - button->imageHeight;
+            imagePosX = button->x + imgBoxDiffX / 2;
+            imagePosY = button->y + imgBoxDiffY / 2;
+            
+            float textBoxDiffX = button->width - textWidth;
+            float textBoxDiffY = button->height - textHeight;
+            textPosX = button->x + textBoxDiffX / 2;
+            textPosY = button->y + textBoxDiffY / 2;
+        }
+        else { // no image
+            textPosX = (button->x + button->width / 2) - textWidth / 2;
+            textPosY = (button->y + button->height / 2) - textHeight / 2;
+        }
+        
+        // skip text rendering if no text
+        if (!button->text.empty()) {
             textRenderer->draw(button->text, textPosX, textPosY, button->textScale, button->textColor);
         }
+        
+        // skip image rendering if no image
+        if(button->textureId != 0) {
+            renderer2d->drawImage(button->textureId, imagePosX, imagePosY, button->imageWidth, button->imageHeight);
+        }
+
+        // set button middle image pos for getter
+        button->calculatedMiddleImgX = imagePosX + button->imageWidth/2.0;
+        button->calculatedMiddleImgY = imagePosY + button->imageHeight/2.0;
     }
     
     renderer2d->flush();

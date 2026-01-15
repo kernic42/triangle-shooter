@@ -15,13 +15,16 @@ emcc -std=c++17 -O2 ^
  -I./lineRenderer ^
  -I./textRenderer ^
  -I./renderer2d ^
+ -I./starship ^
  --preload-file atlas.png ^
  --preload-file background_tile.png ^
  --preload-file crack_mask.png ^
  --preload-file cannon.png ^
  --preload-file assets/fonts/roboto/Roboto-Medium.ttf@fonts/Roboto-Medium.ttf ^
  main.cpp ^
+ starship/shipMenu.cpp ^
  starship/starship.cpp ^
+ starship/shipRenderer.cpp ^
  lineRenderer/lineRenderer.cpp ^
  textRenderer/textRenderer.cpp ^
  renderer2d/renderer2d.cpp ^

@@ -9,68 +9,11 @@
 #include <glm/gtx/transform.hpp>
 #include "button/button.h"
 #include "Renderer2D.h"
+#include "shipRenderer.h"
+#include "shipMenu.h"
 
 class Starship {
 public:
-    enum CellCategory {
-        CELL_ATTACK,
-        CELL_DEFENSE,
-        CELL_UTILITY,
-        CELL_JET,
-        CELL_CUSTOM
-    };
-
-    enum CellName {
-        // Attack
-        CELL_FIRE,
-        CELL_ICE,
-        CELL_RADIOACTIVE,
-        CELL_PROJECTILE_GUN,
-        CELL_LASER_GUN,
-        CELL_MISSILE_GUN,
-        CELL_PLASMA_GUN,
-        CELL_RAPID_FIRE_PROJECTILE,
-
-        // Defense
-        CELL_KINETIC_BARRIER,
-        CELL_ENERGY_SHIELD,
-        CELL_HYBRID_SHIELD,
-        CELL_REFLECTIVE_SHIELD,
-        CELL_REGEN_SHIELD,
-        CELL_SPIKE_ARMOR,
-        CELL_CLOAKING_FIELD,
-        CELL_FORCE_BUBBLE,
-
-        // Utility
-        CELL_SENSOR,
-        CELL_REPAIR_DRONE,
-        CELL_SCANNER,
-        CELL_JAMMER,
-        CELL_CARGO_HOLD,
-        CELL_BATTERY,
-        CELL_ANALYZER,
-        CELL_ENERGY_CORE,
-
-        // Jet
-        CELL_FORWARD_THRUST_JET,
-        CELL_OMNI_BOOST_JET,
-        CELL_TURN_JET,
-        CELL_BURST_JET,
-        CELL_EFFICIENCY_JET,
-        CELL_OVERDRIVE_JET,
-        CELL_STABILIZER_JET,
-
-        // Custom
-        CELL_HOMING_MISSILE,
-        CELL_AREA_DENIAL_MINE,
-        CELL_STEAM_LASER,
-        CELL_SWITCH_BLASTER,
-
-        // None
-        CELL_NONE,
-        UNFOCUSED_MENU
-    };
-
     struct DefenseData {
         float regenRate;
         float maxStrength;
@@ -94,19 +37,6 @@ public:
 
     struct CustomData {
         int customEffectID;
-    };
-
-    struct CellTexCoords {
-        float u0, v0;  // bottom-left
-        float u1, v1;  // bottom-right
-        float u2, v2;  // top-right
-        float pad0, pad1;  // padding to align to 32 bytes (std140)
-    };
-
-    enum AtlasSprite {
-        ATLAS_FIRE = 0,
-        ATLAS_ICE = 1,
-        ATLAS_RADIOACTIVE = 2,
     };
 
     struct TriangleCell {
@@ -162,15 +92,6 @@ public:
     GLuint cellAtlasTexture = 0;
     GLuint crackAtlasTexture = 0;
     GLuint localRotationLoc = 0;
-    
-    // cell menu
-    GLuint cellMenuVAO = 0;
-    GLuint cellMenuVBO = 0;
-    GLuint cellMenuShader = 0;
-    GLuint menuTransformsLoc = 0, menuTexCoordsLoc = 0, menuColorsLoc = 0;
-    GLuint menuProjectionLoc = 0, menuShipRotationLoc = 0;
-    GLuint menuAtlasLoc = 0, menuAtlasCrackLoc = 0;
-    GLuint menuTimeLoc = 0, menuBorderWidthLoc = 0;
 
     // Uniform locations
     GLint transformsLoc = -1;
@@ -180,20 +101,6 @@ public:
     GLint shipRotationLoc = -1;
     GLint atlasLoc = -1;
     GLint atlasCrackLoc = -1;
-
-    GLuint cannonVAO;
-    GLuint cannonVBO;
-    GLuint cannonTexture;
-    GLuint cannonShader;
-
-    // In Starship class header
-    static const int MAX_CANNONS = 256;
-    GLint uCannonPositionsLoc;
-    GLint uCannonAngleLoc;
-    GLint uShipRotationLoc;
-    GLint uProjectionLoc;
-    GLint uTextureLoc;
-    int cannonCount = 0;
 
     float cursorX = 0;
     float cursorY = 0;
@@ -205,15 +112,6 @@ public:
     std::vector<Button*> buttons;
     ButtonManager *buttonManager;
     Renderer2D* renderer2d;
-
-    glm::vec2 anchor;
-    float backWidth;
-    float backHeight;
-    void draw();
-
-
-    Starship();
-    ~Starship();
 
     typedef struct {
         std::vector<glm::mat4> transforms;
@@ -239,16 +137,19 @@ public:
     GLuint cursorTriangleVAO = 0;
     GLuint cursorTriangleVBO = 0;
 
-    typedef struct {
-        bool canDrawTriangleAtCursor = false;
-        CellName type  = CELL_NONE;
-        int cannonCount = 0;
-        int buttonId = -1;
-    } menuCursorSelection;
-    
-    menuCursorSelection menuCursorSelect;
+    ShipRenderer shipRenderer;
+    shipData_t shipData;
+
+    static const int MAX_CANNONS = 256;
+    int cannonCount = 0;
+
+    ShipMenu shipMenu;
     int energy = 10000;
 
+    void draw();
+    void init();
+    Starship();
+    ~Starship();
 
     void screenResize(float width, float height);
     void updateMenuTriangle();
@@ -260,7 +161,6 @@ public:
     void initTriangleAtCursor();
     void initMenuTriangle();
     void drawMenuTriangle();
-    void createMenuButtons(CellCategory category);
     void setButtonManager(ButtonManager *buttonManager, Renderer2D *renderer2d);
 
     CellTexCoords getRandomAtlasCoords(AtlasSprite sprite, int cellNumber);
@@ -268,12 +168,10 @@ public:
     int getSelectedCellId(glm::vec2 cursorPos);
     bool placeCell(glm::vec2 cursorPos);
     bool neighborsAlive(int cellId);
-    int getPrice(Starship::CellName type, int cannonCount);
+    int getPrice(CellName type, int cannonCount);
     
     void setAspect(float aspect, float width, float height);
     void updateCannonPositions();
-    void renderCannons();
-    void initCannons();
     void initCellMiddlePoints();
     void initStarshipCells();
 

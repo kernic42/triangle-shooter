@@ -15,6 +15,8 @@
 #include "button/button.h"
 #include "renderer2d/renderer2d.h"
 
+#include "shaders.hpp"
+
 TextRenderer textRenderer;
 LineRenderer lineRenderer;
 Renderer2D renderer2d;
@@ -310,14 +312,12 @@ void renderToFBO() {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // alpha = 0
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    buttonManager.drawButtons();
+
     ship.drawGrid();
     ship.drawCells();
-    ship.renderCannons();
+    //ship.renderCannons();
     ship.draw();
-    ship.drawTriangleAtCursor();
-
-    buttonManager.drawButtons();
-    ship.drawMenuTriangle();
 
     glBindFramebuffer(GL_READ_FRAMEBUFFER, app.fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, app.resolveFBO);
@@ -356,33 +356,6 @@ void mainLoop() {
     // Display FBO on screen
     renderToScreen();
 }
-
-GLuint static loadTexture(const char* path) {
-    int width, height, channels;
-    unsigned char* data = stbi_load(path, &width, &height, &channels, 4);  // force RGBA
-    
-    if(!data) {
-        printf("Failed to load texture: %s\n", path);
-        return 0;
-    }
-    
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    
-    stbi_image_free(data);
-    
-    printf("Loaded texture: %s (%dx%d)\n", path, width, height);
-    return texture;
-}
-
 
 int main() {
     // Set size FIRST
@@ -426,7 +399,7 @@ g_aspect = (float)app.width / (float)app.height;
     printf("GL_VERSION: %s\n", glGetString(GL_VERSION));
     printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
     
-    backgroundTexture = loadTexture("background_tile.png");
+    backgroundTexture = loadTextureRepeat("background_tile.png");
 
     // Initialize resources
     initFBO();
@@ -451,31 +424,28 @@ g_aspect = (float)app.width / (float)app.height;
     ship.setAspect((float)app.width / (float)app.height, app.width, app.height);
     ship.initStarshipCells();
     ship.initCellMiddlePoints();
-    ship.initMenuTriangle();
     ship.initGrid();
     ship.initCellRendering();
-    ship.createMenuButtons(Starship::CELL_ATTACK);
+    ship.init();
 
-   /* for(int i = 29; i < 34; ++i) {
-            ship.newAttackCell(Starship::CELL_FIRE, i);
+    ship.newAttackCell(CELL_RADIOACTIVE, 0);
+    ship.newAttackCell(CELL_ICE, 1);
+
+    for(int i = 29; i < 34; ++i) {
+            ship.newAttackCell(CELL_FIRE, i);
     }
 
     for(int i = 55; i < 60; ++i) {
-            ship.newAttackCell(Starship::CELL_FIRE, i);
+            ship.newAttackCell(CELL_FIRE, i);
     }
 
     for(int i = 60; i < 104; ++i) {
-            ship.newAttackCell(Starship::CELL_FIRE, i);
+            ship.newAttackCell(CELL_FIRE, i);
     }
 
     for(int i = 139; i < 164; ++i) {
-            ship.newAttackCell(Starship::CELL_RADIOACTIVE, i);
-    }*/
-
-    ship.newAttackCell(Starship::CELL_FIRE, 8);
-
-    ship.initCannons();
-    ship.initTriangleAtCursor();
+            ship.newAttackCell(CELL_RADIOACTIVE, i);
+    }
 
 
     // Register mouse events

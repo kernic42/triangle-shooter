@@ -56,8 +56,9 @@ void Starship::draw() {
     // update ship data struct before sending it
     shipData.shipRot = currentRotation;
 
-    shipRenderer.render(&shipData, 1, glm::vec2(cursorX, cursorY));
     shipMenu.render();
+
+    shipRenderer.render(&shipData, 1, glm::vec2(cursorX, cursorY));
 }
 
 void Starship::setAspect(float aspect, float width, float height) {
@@ -387,7 +388,7 @@ int Starship::getPrice(CellName type, int cannonCount) {
 bool Starship::placeCell(glm::vec2 cursorPos) { // when user clicks
     int cellId = getSelectedCellId(cursorPos);
 
-    // if user interacts with menu, do not do anything
+    // if user interacts with menu, don't do anything
     float cursorX = (cursorPos.x+1.0)/2.0 * width;
     float cursorY = (cursorPos.y+1.0)/2.0 * height;
     bool insideMenu = shipMenu.anchor.x < cursorX && cursorX < shipMenu.anchor.x + shipMenu.backWidth &&

@@ -44,7 +44,9 @@ void ShipMenu::init() {
 
 void ShipMenu::render() {
     renderer2d->drawFilledRoundedRect(anchor, backWidth, backHeight, 12.0f * (height / 2000.0), glm::vec4(27.0/255.0, 27.0/255.0, 27.0/255.0, 1.0));
-    renderer2d->drawRoundedRect(anchor, backWidth, backHeight, 1.0, 12.0f * (height / 2000.0), glm::vec4(0.0, 0.0, 0.0, 1.0));
+    renderer2d->drawRoundedRect(anchor, backWidth, backHeight, 1.4, 12.0f * (height / 2000.0), glm::vec4(0.0, 0.0, 0.0, 1.0));
+    renderer2d->flush();
+    buttonManager->drawButtons();
     drawTriangleAtCursor(); 
     drawMenuTriangle();
 }
@@ -433,7 +435,7 @@ void ShipMenu::createMenuButtons(CellCategory category) {
         config.color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f);
         config.borderRadius = 10.0f * (height / 2000.0);
         config.borderColor = glm::vec4(0.0, 0.0, 0.0, 1.0); // grey
-        config.borderWidth = 1.2;
+        config.borderWidth = 1.4;
         config.drawImage = "top";
         config.textureId = 0; // still need to draw with img centering logic when no texture, just don't call renderer
         config.imageHeight = 0.05 * height;

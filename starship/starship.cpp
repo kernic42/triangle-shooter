@@ -28,7 +28,7 @@ Starship::Starship() :
 }
 
 Starship::~Starship() {
-    cleanupGrid();
+  
 }
 
 void Starship::updateCannonPositions() {
@@ -47,8 +47,39 @@ void Starship::updateCannonPositions() {
     memcpy(&shipData.cannonData.pos[0], &cannonPositions[0], cannonCount * sizeof(glm::vec2));
 }
 
+
+void Starship::updateCellUniforms() {
+    std::vector<glm::mat4> transforms(cells.size());
+    std::vector<glm::mat3x2> texCoords(cells.size());
+    std::vector<glm::vec4> colors(cells.size());
+    
+    int aliveCount = 0;
+
+    for(size_t i = 0; i < cells.size(); ++i) {
+        if(cells[i].cellAlive) {
+            transforms[aliveCount] = cells[i].transform;
+            
+            texCoords[aliveCount] = glm::mat3x2(glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0),
+                                                glm::vec2(cells[i].texCoords.u1, cells[i].texCoords.v1),
+                                                glm::vec2(cells[i].texCoords.u2, cells[i].texCoords.v2));
+
+            colors[aliveCount] = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
+
+            aliveCount += 1;
+        }
+    }
+    
+    shipData.configChanged = true;
+    shipData.cellHullData.count = aliveCount;
+    memcpy(shipData.cellHullData.model, &transforms[0], transforms.size() * sizeof(glm::mat4));
+    memcpy(shipData.cellHullData.texCoords, &texCoords[0], texCoords.size() * sizeof(glm::mat3x2));
+    memcpy(shipData.cellHullData.colors, &colors[0], colors.size() * sizeof(glm::vec4)); // when this works replace memcpy by just filling right field in struct
+}
+
 void Starship::init() { // function where we should init everything..
+    shipRenderer.initGrid();
     shipRenderer.initCannons();
+    shipRenderer.initCellRendering();
     shipMenu.init();
 }
 
@@ -68,96 +99,6 @@ void Starship::setAspect(float aspect, float width, float height) {
 
     shipRenderer.setAspect(width, height);
     shipMenu.setAspect(width, height);
-}
-
-void Starship::initCellRendering() {
-    // Compile shader
-    GLuint vert = compileShader(GL_VERTEX_SHADER, cellVertexShader);
-    GLuint frag = compileShader(GL_FRAGMENT_SHADER, cellFragmentShader);
-    cellShader = glCreateProgram();
-    glAttachShader(cellShader, vert);
-    glAttachShader(cellShader, frag);
-    glLinkProgram(cellShader);
-    glDeleteShader(vert);
-    glDeleteShader(frag);
-    
-    // Get uniform locations
-    transformsLoc = glGetUniformLocation(cellShader, "uTransforms");
-    texCoordsLoc = glGetUniformLocation(cellShader, "uTexCoords");
-    colorsLoc = glGetUniformLocation(cellShader, "uColors");
-    projectionLoc = glGetUniformLocation(cellShader, "uProjection");
-    shipRotationLoc = glGetUniformLocation(cellShader, "uShipRotation");
-    atlasLoc = glGetUniformLocation(cellShader, "uAtlas");
-    atlasCrackLoc = glGetUniformLocation(cellShader, "uCrackTex");
-    localRotationLoc = glGetUniformLocation(cellShader, "uLocalRotation");
-    
-    // Create triangle VAO/VBO
-    float half = cellSize / 2.0f;
-    float triangleVerts[] = {
-        -half, -half,
-         half, -half,
-         half,  half
-    };
-    
-    glGenVertexArrays(1, &cellVAO);
-    glGenBuffers(1, &cellVBO);
-    
-    glBindVertexArray(cellVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, cellVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    glBindVertexArray(0);
-    
-    // Load atlas texture
-    cellAtlasTexture = loadTexture("atlas.png");
-    crackAtlasTexture = loadTexture("crack_mask.png");
-    printf("crack texture ID: %u\n", crackAtlasTexture);
-}
-
-void Starship::drawCells() {
-    if(cells.empty()) return;
-    
-    glUseProgram(cellShader);
-
-    float borderWidth = 0.012;
-    glUniform1f(glGetUniformLocation(cellShader, "uBorderWidth"), borderWidth);
-    
-    // init with no rot
-    glUniformMatrix4fv(localRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0)));
-
-    // Projection
-    extern glm::mat4 projection;
-    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
-    
-    // Ship rotation
-    float c = cosf(currentRotation);
-    float s = sinf(currentRotation);
-    float rotationMatrix[9] = {
-        c,  s,  0.0f,
-       -s,  c,  0.0f,
-        0.0f, 0.0f, 1.0f
-    };
-    glUniformMatrix3fv(shipRotationLoc, 1, GL_FALSE, rotationMatrix);
-
-    glUniform1f(glGetUniformLocation(cellShader, "uTime"), emscripten_get_now() / 1000.0f);
-    
-    // Bind atlas
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cellAtlasTexture);
-    glUniform1i(atlasLoc, 0);
-
-    // Bind crack atlas
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, crackAtlasTexture);
-    glUniform1i(atlasCrackLoc, 1);
-    
-    // Draw
-    glBindVertexArray(cellVAO);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cells.size());
-    glBindVertexArray(0);
 }
 
 CellTexCoords Starship::getRandomAtlasCoords(AtlasSprite sprite, int cellNumber) {
@@ -204,38 +145,6 @@ CellTexCoords Starship::getRandomAtlasCoords(AtlasSprite sprite, int cellNumber)
     coords.pad1 = 0.0f;
     
     return coords;
-}
-
-
-void Starship::updateCellUniforms() {
-    if(cells.empty()) return;
-    
-    glUseProgram(cellShader);
-    glBindVertexArray(cellVAO);
-    
-    std::vector<glm::mat4> transforms(cells.size());
-    std::vector<glm::vec2> texCoords(cells.size() * 3);
-    std::vector<glm::vec4> colors(cells.size());
-    
-    int aliveCount = 0;
-
-    for(size_t i = 0; i < cells.size(); ++i) {
-        if(cells[i].cellAlive) {
-            transforms[aliveCount] = cells[i].transform;
-            
-            texCoords[aliveCount * 3 + 0] = glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0);
-            texCoords[aliveCount * 3 + 1] = glm::vec2(cells[i].texCoords.u1, cells[i].texCoords.v1);
-            texCoords[aliveCount * 3 + 2] = glm::vec2(cells[i].texCoords.u2, cells[i].texCoords.v2);
-            
-            colors[aliveCount] = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
-
-            aliveCount += 1;
-        }
-    }
-    
-    glUniformMatrix4fv(transformsLoc, aliveCount, GL_FALSE, glm::value_ptr(transforms[0]));
-    glUniform2fv(texCoordsLoc, aliveCount * 3, glm::value_ptr(texCoords[0]));
-    glUniform4fv(colorsLoc, aliveCount, glm::value_ptr(colors[0]));
 }
 
 bool Starship::isCursorInsideCell(glm::vec2 cursor, glm::vec4 v1, glm::vec4 v2, glm::vec4 v3) {
@@ -473,95 +382,6 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
     updateCannonPositions();
 }
 
-void Starship::initGrid() {
-    // Create shader program
-    GLuint vert = compileShader(GL_VERTEX_SHADER, gridVertexShader);
-    GLuint frag = compileShader(GL_FRAGMENT_SHADER, gridFragmentShader);
-    gridShader = glCreateProgram();
-    glAttachShader(gridShader, vert);
-    glAttachShader(gridShader, frag);
-    glLinkProgram(gridShader);
-    glDeleteShader(vert);
-    glDeleteShader(frag);
-
-    rotationUniformLoc = glGetUniformLocation(gridShader, "uRotation");
-    projectionUniformLoc = glGetUniformLocation(gridShader, "uProjection");
-
-    // Build line vertices
-    std::vector<float> vertices;
-
-    // 1. Vertical lines
-    for (int i = 0; i <= gridWidth; i++) {
-        float x = originX + i * cellSize;
-        float y0 = originY;
-        float y1 = originY + gridHeight * cellSize;
-        vertices.push_back(x);  vertices.push_back(y0);
-        vertices.push_back(x);  vertices.push_back(y1);
-    }
-
-    // 2. Horizontal lines
-    for (int j = 0; j <= gridHeight; j++) {
-        float y = originY + j * cellSize;
-        float x0 = originX;
-        float x1 = originX + gridWidth * cellSize;
-        vertices.push_back(x0); vertices.push_back(y);
-        vertices.push_back(x1); vertices.push_back(y);
-    }
-
-    // 3. Diagonal lines (bottom-left to top-right of each cell)
-    for (int i = 0; i < gridWidth; i++) {
-        for (int j = 0; j < gridHeight; j++) {
-            float x0 = originX + i * cellSize;
-            float y0 = originY + j * cellSize;
-            float x1 = originX + (i + 1) * cellSize;
-            float y1 = originY + (j + 1) * cellSize;
-            vertices.push_back(x0); vertices.push_back(y0);
-            vertices.push_back(x1); vertices.push_back(y1);
-        }
-    }
-
-    gridVertexCount = vertices.size() / 2;
-
-    // Create VAO/VBO
-    glGenVertexArrays(1, &gridVAO);
-    glGenBuffers(1, &gridVBO);
-
-    glBindVertexArray(gridVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glBindVertexArray(0);
-}
-
-void Starship::drawGrid() {
-    glUseProgram(gridShader);
-
-    float c = cosf(currentRotation);
-    float s = sinf(currentRotation);
-    float rotationMatrix[9] = {
-        c,  s,  0.0f,
-       -s,  c,  0.0f,
-        0.0f, 0.0f, 1.0f
-    };
-
-    glUniformMatrix3fv(rotationUniformLoc, 1, GL_FALSE, rotationMatrix);
-    glUniformMatrix4fv(projectionUniformLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-    glBindVertexArray(gridVAO);
-    glDrawArrays(GL_LINES, 0, gridVertexCount);
-    glBindVertexArray(0);
-}
-
-void Starship::cleanupGrid() {
-    if (gridVAO) glDeleteVertexArrays(1, &gridVAO);
-    if (gridVBO) glDeleteBuffers(1, &gridVBO);
-    if (gridShader) glDeleteProgram(gridShader);
-    gridVAO = gridVBO = gridShader = 0;
-}
-
 void Starship::onMouseDown(int button, float x, float y) {
     if (button == 2) {
         isDragging = true;
@@ -608,4 +428,6 @@ void Starship::onMouseMove(float x, float y) {
     
     // Rotation = stored rotation + angle delta
     currentRotation = dragStartRotation + (currentAngle - dragStartX);
+
+    
 }

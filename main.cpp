@@ -312,8 +312,8 @@ void renderToFBO() {
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);  // alpha = 0
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    ship.drawGrid();
-    ship.drawCells();
+    //ship.drawGrid();
+    //ship.drawCells();
     //ship.renderCannons();
     ship.draw();
 
@@ -422,8 +422,8 @@ g_aspect = (float)app.width / (float)app.height;
     ship.setAspect((float)app.width / (float)app.height, app.width, app.height);
     ship.initStarshipCells();
     ship.initCellMiddlePoints();
-    ship.initGrid();
-    ship.initCellRendering();
+    //ship.initGrid();
+    //ship.initCellRendering();
     ship.init();
 
     ship.newAttackCell(CELL_RADIOACTIVE, 0);

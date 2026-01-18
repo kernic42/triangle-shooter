@@ -2,6 +2,12 @@
 #include "stbImage/stb_image.h"
 const int MAX_CANNON_COUNT = 9*9 * 2;
 
+// Grid settings
+constexpr int gridWidth = 9;
+constexpr int gridHeight = 9;
+constexpr float cellSize = 0.120;
+constexpr float originX = -(gridWidth*cellSize)/2.0;
+constexpr float originY = -(gridHeight*cellSize)/2.0; // maybe set these field from within starship class, into renderer? since its supposed to hold the truth of the cells layout, and the renderer renders
 
 // maybe should share this in .h file
 typedef struct {
@@ -15,6 +21,7 @@ typedef struct {
 typedef struct {
     glm::mat4 model[MAX_CANNON_COUNT];       // static
     glm::mat3x2 texCoords[MAX_CANNON_COUNT]; // static
+    glm::vec4 colors[MAX_CANNON_COUNT];      // static
     int count = 0;
 } cellHullData_t;
 

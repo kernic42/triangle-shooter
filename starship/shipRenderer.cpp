@@ -17,12 +17,223 @@ ShipRenderer::~ShipRenderer() {
 
 }
 
+static GLuint compileShader(GLenum type, const char* src) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &src, nullptr);
+    glCompileShader(shader);
+    return shader;
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+/////////                      OpenGL Cell Grid Hull Part                              ////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+void ShipRenderer::initGrid() {
+    // Create shader program
+    GLuint vert = compileShader(GL_VERTEX_SHADER, gridVertexShader);
+    GLuint frag = compileShader(GL_FRAGMENT_SHADER, gridFragmentShader);
+    gridShader = glCreateProgram();
+    glAttachShader(gridShader, vert);
+    glAttachShader(gridShader, frag);
+    glLinkProgram(gridShader);
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+
+    gridRotationLoc = glGetUniformLocation(gridShader, "uRotation");
+    gridProjectionLoc = glGetUniformLocation(gridShader, "uProjection");
+
+    // Build line vertices
+    std::vector<float> vertices;
+
+    // 1. Vertical lines
+    for (int i = 0; i <= gridWidth; i++) {
+        float x = originX + i * cellSize;
+        float y0 = originY;
+        float y1 = originY + gridHeight * cellSize;
+        vertices.push_back(x);  vertices.push_back(y0);
+        vertices.push_back(x);  vertices.push_back(y1);
+    }
+
+    // 2. Horizontal lines
+    for (int j = 0; j <= gridHeight; j++) {
+        float y = originY + j * cellSize;
+        float x0 = originX;
+        float x1 = originX + gridWidth * cellSize;
+        vertices.push_back(x0); vertices.push_back(y);
+        vertices.push_back(x1); vertices.push_back(y);
+    }
+
+    // 3. Diagonal lines (bottom-left to top-right of each cell)
+    for (int i = 0; i < gridWidth; i++) {
+        for (int j = 0; j < gridHeight; j++) {
+            float x0 = originX + i * cellSize;
+            float y0 = originY + j * cellSize;
+            float x1 = originX + (i + 1) * cellSize;
+            float y1 = originY + (j + 1) * cellSize;
+            vertices.push_back(x0); vertices.push_back(y0);
+            vertices.push_back(x1); vertices.push_back(y1);
+        }
+    }
+
+    gridVertexCount = vertices.size() / 2;
+
+    // Create VAO/VBO
+    glGenVertexArrays(1, &gridVAO);
+    glGenBuffers(1, &gridVBO);
+
+    glBindVertexArray(gridVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
+    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glBindVertexArray(0);
+}
+
+void ShipRenderer::drawGrid(float rotation) {
+    glUseProgram(gridShader);
+
+    float c = cosf(rotation);
+    float s = sinf(rotation);
+    float rotationMatrix[9] = {
+        c,  s,  0.0f,
+       -s,  c,  0.0f,
+        0.0f, 0.0f, 1.0f
+    };
+
+    glUniformMatrix3fv(gridRotationLoc, 1, GL_FALSE, rotationMatrix);
+    glUniformMatrix4fv(gridProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glBindVertexArray(gridVAO);
+    glDrawArrays(GL_LINES, 0, gridVertexCount);
+    glBindVertexArray(0);
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /////////                        OpenGL Cells Hull Part                                ////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void ShipRenderer::renderCellHulls() {
+void ShipRenderer::initCellRendering() {
+    // Compile shader
+    GLuint vert = compileShader(GL_VERTEX_SHADER, cellVertexShader);
+    GLuint frag = compileShader(GL_FRAGMENT_SHADER, cellFragmentShader);
+    hullShader = glCreateProgram();
+    glAttachShader(hullShader, vert);
+    glAttachShader(hullShader, frag);
+    glLinkProgram(hullShader);
+    glDeleteShader(vert);
+    glDeleteShader(frag);
+    
+    // Get uniform locations
+    hullTransformLoc = glGetUniformLocation(hullShader, "uTransforms");
+    hullTexCoordsLoc = glGetUniformLocation(hullShader, "uTexCoords");
+    hullColorsLoc = glGetUniformLocation(hullShader, "uColors");
+    hullProjectionLoc = glGetUniformLocation(hullShader, "uProjection");
+    hullShipRotationLoc = glGetUniformLocation(hullShader, "uShipRotation");
+    hullLocalRotationLoc = glGetUniformLocation(hullShader, "uLocalRotation");
+    hullAtlasLoc = glGetUniformLocation(hullShader, "uAtlas");
+    hullAtlasCrackLoc = glGetUniformLocation(hullShader, "uCrackTex");
+    hullBorderWidthLoc = glGetUniformLocation(hullShader, "uBorderWidth");
+    hullTimeLoc = glGetUniformLocation(hullShader, "uTime");
+    
+    // Create triangle VAO/VBO
+    float half = cellSize / 2.0f;
+    float triangleVerts[] = {
+        -half, -half,
+         half, -half,
+         half,  half
+    };
+    
+    glGenVertexArrays(1, &hullVAO);
+    glGenBuffers(1, &hullVBO);
+    
+    glBindVertexArray(hullVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, hullVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    glBindVertexArray(0);
+    
+    // Load atlas texture
+    hullAtlasTexture = loadTexture("atlas.png");
+    hullCrackAtlasTexture = loadTexture("crack_mask.png");
+    printf("crack texture ID: %u\n", hullCrackAtlasTexture);
+}
 
+void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
+    if (cannonCount == 0) return;
+
+    glUseProgram(hullShader);
+
+    float borderWidth = 0.012;
+    glUniform1f(hullBorderWidthLoc, borderWidth);
+    
+    // init with no rot
+    glUniformMatrix4fv(hullLocalRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0)));
+
+    // Projection
+    glUniformMatrix4fv(hullProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    
+    // Ship rotation
+    float currentRotation = shipsRotation[0]; // just use first rotation for now
+    float c = cosf(currentRotation);          // prob replace with glm::mat4
+    float s = sinf(currentRotation);
+    float rotationMatrix[9] = {
+        c,  s,  0.0f,
+       -s,  c,  0.0f,
+        0.0f, 0.0f, 1.0f
+    };
+    glUniformMatrix3fv(hullShipRotationLoc, 1, GL_FALSE, rotationMatrix);
+
+    glUniform1f(hullTimeLoc, emscripten_get_now() / 1000.0f);
+    
+    // Bind atlas
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, hullAtlasTexture);
+    glUniform1i(hullAtlasLoc, 0);
+
+    // Bind crack atlas
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, hullCrackAtlasTexture);
+    glUniform1i(hullAtlasCrackLoc, 1);
+    
+    // Draw
+    glBindVertexArray(hullVAO);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cannonCount);
+    glBindVertexArray(0);
+}
+
+
+void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
+    glUseProgram(hullShader);
+    glBindVertexArray(hullVAO);
+    
+    // need to iterate through all ships and copy their data into contiguous vector to send to gpu
+    std::vector<glm::mat4> transforms;
+    std::vector<glm::mat3x2> texCoords;
+    std::vector<glm::vec4> colors;
+    
+    int aliveCount = 0;
+
+    for(size_t i = 0; i < shipCount; ++i) {
+        shipData_t &ship = ships[i];
+
+        for(int j = 0; j < ship.cellHullData.count; ++j) { // maybe put the count as a global to share between hull and cannons instead in the struct
+            texCoords.push_back(ship.cellHullData.texCoords[j]);
+            transforms.push_back(ship.cellHullData.model[j]); // probably the slowest way of copying
+            colors.push_back(ship.cellHullData.colors[j]);
+
+            aliveCount++;
+        }
+    }
+    
+    glUniform2fv(hullTexCoordsLoc, aliveCount * 3, glm::value_ptr(texCoords[0]));
+    glUniformMatrix4fv(hullTransformLoc, aliveCount, GL_FALSE, glm::value_ptr(transforms[0]));
+    glUniform4fv(hullColorsLoc, aliveCount, glm::value_ptr(colors[0]));
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -149,8 +360,6 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
 }
 
 void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
-    renderCellHulls();
-
     // check if any config changed, if any of the ship config changed need to update the entire config in the gpu
     bool anyConfigChanged = false;
 
@@ -165,6 +374,7 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
 
     if(anyConfigChanged) {
         updateCannonPositions(ships, count);
+        updateCellUniforms(ships, count);
         printf("ship config updated\n");
     }
     
@@ -176,5 +386,7 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
     }
 
     // render cannon with gathered data from all the ship structs
+    drawGrid(shipsRotation[0]); // ship is probably always stored as ship 0 and never gets destroyed, maybe add a property field for main ship
+    renderCells(shipsRotation);
     renderCannons(cursorPos, shipsRotation);
 }

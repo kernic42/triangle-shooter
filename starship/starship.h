@@ -61,13 +61,6 @@ public:
 
     std::vector<TriangleCell> cells;
 
-    // Grid settings
-    int gridWidth = 9;
-    int gridHeight = 9;
-    float cellSize = 0.120;
-    float originX = -(gridWidth*cellSize)/2.0;
-    float originY = -(gridHeight*cellSize)/2.0;
-
     // OpenGL stuff for grid
     GLuint gridVAO = 0;
     GLuint gridVBO = 0;
@@ -171,19 +164,13 @@ public:
     int getPrice(CellName type, int cannonCount);
     
     void setAspect(float aspect, float width, float height);
-    void updateCannonPositions();
     void initCellMiddlePoints();
     void initStarshipCells();
 
-    void initCellRendering();
+    void updateCannonPositions();
     void updateCellUniforms();
     void newAttackCell(CellName name, int cellNumber);
-    void drawCells();
-
-    void initGrid();
-    void drawGrid();
-    void cleanupGrid();
-
+    
     // Input handlers
     void onMouseDown(int button, float x, float y);
     void onMouseUp(int button, float x, float y);

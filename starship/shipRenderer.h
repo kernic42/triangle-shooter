@@ -19,10 +19,21 @@ class ShipRenderer {
     float width = 0;
     float height = 0;
 
-    // cannon OpenGL stuff
+    // max settings
     static const int MAX_CANNONS = 256;
     int cannonCount = 0;
-    GLuint cannonVAO, cannonVBO, cannonTexture, cannonShader;
+
+    // grid OpenGL stuff
+    GLuint gridShader, gridVAO, gridVBO;
+    GLuint gridRotationLoc, gridProjectionLoc;
+    GLuint gridVertexCount;
+
+    // cell hull OpenGL stuff
+    GLuint hullShader, hullVAO, hullVBO, hullAtlasTexture, hullCrackAtlasTexture;
+    GLuint hullTransformLoc, hullTexCoordsLoc, hullColorsLoc, hullProjectionLoc, hullShipRotationLoc, hullLocalRotationLoc, hullAtlasLoc, hullAtlasCrackLoc, hullBorderWidthLoc, hullTimeLoc;
+
+    // cannon OpenGL stuff
+    GLuint cannonShader, cannonVAO, cannonVBO, cannonTexture;
     GLuint projectionLoc, shipRotationLoc, atlasLoc, atlasCrackLoc, uCannonPositionsLoc, uCannonAngleLoc, uShipRotationLoc, uProjectionLoc, uTextureLoc;
 
     public:
@@ -33,8 +44,14 @@ class ShipRenderer {
     // init
     void setAspect(float width, float height);
 
+    // OpenGL Cell Grid Hull Part
+    void initGrid();
+    void drawGrid(float rotation);
+
     // OpenGL Cells Hull Part               
-    void renderCellHulls();
+    void initCellRendering();
+    void renderCells(std::vector<float> shipsRotation);
+    void updateCellUniforms(shipData_t *ships, int shipCount);
 
     // OpenGL Cannons Part
     void initCannons();

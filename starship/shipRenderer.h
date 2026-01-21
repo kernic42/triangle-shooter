@@ -33,8 +33,9 @@ class ShipRenderer {
     GLuint hullTransformLoc, hullTexCoordsLoc, hullColorsLoc, hullProjectionLoc, hullShipRotationLoc, hullLocalRotationLoc, hullAtlasLoc, hullAtlasCrackLoc, hullBorderWidthLoc, hullTimeLoc;
 
     // cannon OpenGL stuff
-    GLuint cannonShader, cannonVAO, cannonVBO, cannonTexture;
-    GLuint projectionLoc, shipRotationLoc, atlasLoc, atlasCrackLoc, uCannonPositionsLoc, uCannonAngleLoc, uShipRotationLoc, uProjectionLoc, uTextureLoc;
+    GLuint cannonShader, cannonVAO, cannonVBO, cannonPositionsVBO, cannonTexture;
+    GLuint cannonAngleLoc, cannonShipRotationLoc, cannonProjectionLoc, cannonTextureLoc, cannonGridDimensionsLoc;
+    glm::vec2 cannonGridDimensions = glm::vec2(2.0, 2.0); // just check if the shader still works for now
 
     public:
 

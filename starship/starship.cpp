@@ -13,31 +13,27 @@ static GLuint compileShader(GLenum type, const char* src) {
     return shader;
 }
 
-Starship::Starship() :
-      gridVAO(0),
-      gridVBO(0),
-      gridShader(0),
-      rotationUniformLoc(-1),
-      gridVertexCount(0),
-      currentRotation(0.0f),
-      dragStartRotation(0.0f),
-      isDragging(false),
-      dragStartX(0.0f),
-      dragStartY(0.0f)
-{
-}
-
-Starship::~Starship() {
-  
-}
+Starship::Starship() { }
+Starship::~Starship() { }
 
 void Starship::updateCannonPositions() {
-    glm::vec2 cannonPositions[MAX_CANNONS];
+    glm::vec2 cannonPositions[MAX_CANNONS]; // I think MAX_CANNON is redudant with MAX_CANNON_COUNT
+    float cannonColors[MAX_CANNONS];
     cannonCount = 0;
 
     for (int i = 0; i < cells.size() && cannonCount < MAX_CANNONS; ++i) {
         if (cells[i].cellAlive) {
             cannonPositions[cannonCount] = cells[i].middleOfTriangle;
+
+            // temporary..
+            if(cells[i].color == glm::vec4(1.0f, 0.5f, 0.2f, 1.0f)) { // orange
+                cannonColors[cannonCount] = 0;
+            } else if(cells[i].color == glm::vec4(0.2f, 0.6f, 1.0f, 1.0f)) { // blue
+                cannonColors[cannonCount] = 1;
+            } else if(cells[i].color == glm::vec4(0.2f, 1.0f, 0.2f, 1.0f)) { // green
+                cannonColors[cannonCount] = 2;
+            }
+    
             cannonCount++;
         }
     }
@@ -45,8 +41,8 @@ void Starship::updateCannonPositions() {
     shipData.configChanged = true;
     shipData.cannonData.count = cannonCount;
     memcpy(&shipData.cannonData.pos[0], &cannonPositions[0], cannonCount * sizeof(glm::vec2));
+    memcpy(&shipData.cannonData.colors[0], &cannonColors[0], cannonCount * sizeof(float));
 }
-
 
 void Starship::updateCellUniforms() {
     std::vector<glm::mat4> transforms(cells.size());
@@ -86,10 +82,9 @@ void Starship::init() { // function where we should init everything..
 void Starship::draw() {
     // update ship data struct before sending it
     shipData.shipRot = currentRotation;
-
-    shipMenu.render();
-
     shipRenderer.render(&shipData, 1, glm::vec2(cursorX, cursorY));
+    
+    shipMenu.render();
 }
 
 void Starship::setAspect(float aspect, float width, float height) {
@@ -297,25 +292,12 @@ int Starship::getPrice(CellName type, int cannonCount) {
 bool Starship::placeCell(glm::vec2 cursorPos) { // when user clicks
     int cellId = getSelectedCellId(cursorPos);
 
-    // if user interacts with menu, don't do anything
-    float cursorX = (cursorPos.x+1.0)/2.0 * width;
-    float cursorY = (cursorPos.y+1.0)/2.0 * height;
-    bool insideMenu = shipMenu.anchor.x < cursorX && cursorX < shipMenu.anchor.x + shipMenu.backWidth &&
-                      shipMenu.anchor.y < cursorY && cursorY < shipMenu.anchor.y + shipMenu.backHeight;
-    if(insideMenu) return false; 
+    bool clickedOutShip = cellId == -1;
+    bool clickedOutMenu = !shipMenu.isCursorInsideMenu(cursorPos);
 
-    // get cell id, if outside ship && outside menu, just click out of menu
-    if(cellId == -1 && !insideMenu) {
-        // unselect clicked state
-        shipMenu.menuCursorSelect.canDrawTriangleAtCursor = false;
-        shipMenu.menuCursorSelect.type = CELL_NONE;
-        shipMenu.menuCursorSelect.buttonId = -1;
-
-        // reset buttons color(unselect button)
-        for(int i = 0; i < buttons.size(); ++i)
-            buttons[i]->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f);
-
-        // couldn't place cell..
+    // couldn't place cell..
+    if(clickedOutShip && clickedOutMenu) {
+        shipMenu.unselectButtons();
         return false;
     }
 
@@ -428,6 +410,4 @@ void Starship::onMouseMove(float x, float y) {
     
     // Rotation = stored rotation + angle delta
     currentRotation = dragStartRotation + (currentAngle - dragStartX);
-
-    
 }

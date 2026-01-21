@@ -1,5 +1,8 @@
 #pragma once
 #include "stbImage/stb_image.h"
+#include <fstream>
+#include <sstream>
+#include <string>
 const int MAX_CANNON_COUNT = 9*9 * 2;
 
 // Grid settings
@@ -15,6 +18,7 @@ typedef struct {
     glm::vec2 pivot;                        // static
     glm::vec2 size;                         // static
     glm::vec2 pos[MAX_CANNON_COUNT];        // static
+    float colors[MAX_CANNON_COUNT]; // should be an enum
     int count = 0;
 } cannonData_t;
 
@@ -122,67 +126,6 @@ void main() {
     fragColor = vec4(0.3, 0.8, 0.3, 1.0);
 }
 )";
-/*
-static const char* cellVertexShader = R"(#version 300 es
-layout(location = 0) in vec2 aPos;
-
-uniform mat4 uTransforms[256];
-uniform vec2 uTexCoords[768];
-uniform vec4 uColors[256];
-
-uniform mat4 uProjection;
-uniform mat4 uLocalRotation;
-uniform mat3 uShipRotation;
-
-out vec2 vTexCoord;
-out vec3 vBary;
-out vec4 vColor;
-
-void main() {
-    mat4 model = uTransforms[gl_InstanceID];
-    vTexCoord = uTexCoords[gl_InstanceID * 3 + gl_VertexID];
-    vColor = uColors[gl_InstanceID];
-    
-    if(gl_VertexID == 0) vBary = vec3(1.0, 0.0, 0.0);
-    else if(gl_VertexID == 1) vBary = vec3(0.0, 1.0, 0.0);
-    else vBary = vec3(0.0, 0.0, 1.0);
-    
-    vec4 localPos = model * uLocalRotation * vec4(aPos, 0.0, 1.0);
-    vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
-    gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
-}
-)";*/
-/*
-static const char* cellFragmentShader = R"(#version 300 es
-precision mediump float;
-
-in vec2 vTexCoord;
-in vec3 vBary;
-in vec4 vColor;
-out vec4 fragColor;
-
-uniform sampler2D uAtlas;
-uniform sampler2D uCrackTex;
-uniform float uBorderWidth;
-uniform float uTime;
-
-void main() {
-    float minDist = min(min(vBary.x, vBary.y), vBary.z);
-    
-    float edge = fwidth(minDist);
-    float blend = smoothstep(uBorderWidth - edge, uBorderWidth + edge, minDist);
-    
-    vec4 texColor = texture(uAtlas, vTexCoord);
-    vec4 baseColor = mix(vColor, texColor, blend);
-    
-    // Crack glow
-    float crack = texture(uCrackTex, vTexCoord).r;
-    float pulse = 0.01 + 0.08 * sin(uTime * 2.0);
-    vec4 glow = vColor * crack * pulse;
-    
-    fragColor = baseColor + glow;
-}
-)";*/
 
 inline const char* cursorCellVertexShader = R"(#version 300 es
 layout(location = 0) in vec2 aPos;
@@ -284,55 +227,23 @@ void main() {
 }
 )";
 
-inline const char* cannonVertexShader = R"(#version 300 es
-precision highp float;
-
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-
-const int MAX_CANNONS = 256;
-
-uniform vec2 uCannonPositions[MAX_CANNONS];
-uniform float uCannonAngle;
-uniform mat4 uProjection;
-uniform mat3 uShipRotation;
-
-out vec2 vTexCoord;
-
-void main() {
-    vec2 pos = uCannonPositions[gl_InstanceID];
+inline std::string loadTextFile(const char* path) {
+    FILE* f = fopen(path, "rb");  // try binary mode
+    if (!f) {
+        printf("Failed to open: %s (errno: %d - %s)\n", path, errno, strerror(errno));
+        return {};
+    }
     
-    float c = cos(uCannonAngle);
-    float s = sin(uCannonAngle);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
     
-    vec2 rotated = vec2(
-        aPos.x * c - aPos.y * s,
-        aPos.x * s + aPos.y * c
-    );
+    std::string content(size, '\0');
+    fread(&content[0], 1, size, f);
+    fclose(f);
     
-    vec2 vertex = rotated + pos;
-    
-    vec3 shipRotated = uShipRotation * vec3(vertex, 0.0);
-
-    gl_Position = uProjection * vec4(shipRotated, 1.0);
-
-    vTexCoord = aTexCoord;
+    return content;
 }
-)";
-
-// Fragment Shader
-inline const char* cannonFragmentShader = R"(#version 300 es
-precision mediump float;
-
-in vec2 vTexCoord;
-uniform sampler2D uTexture;
-
-out vec4 fragColor;
-
-void main() {
-    fragColor = texture(uTexture, vTexCoord);
-}
-)";
 
 inline GLuint loadTexture(const char* path) {
     int width, height, channels;

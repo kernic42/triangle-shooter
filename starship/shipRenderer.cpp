@@ -9,7 +9,7 @@ void ShipRenderer::setAspect(float width, float height) {
     this->height = height;
 }
 
-ShipRenderer::ShipRenderer(){
+ShipRenderer::ShipRenderer() {
 
 }
 
@@ -243,11 +243,15 @@ void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
 // need to send cannon mat4 with glVertexAttribDivisor, 1 per cannon quad
 // need to control orientation and setup of this mat4 from ship, ship stores pivot offset and size x,y, then reconstruct mat4 and setup send to gpu
 
-void ShipRenderer::initCannons() {                                 // this init cannons program, set the middle point in memory for each cannon cell that exists.
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);                  // the middle point of each cell can probably just be set everytime shipConfigChanged == true
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);                // the only thing it updated was the middle point, now that's also the only thing it needs to update
-    glShaderSource(vs, 1, &cannonVertexShader, nullptr);           // so this init just set the quad for cannons(that we can later change aspect with mat4) from data contained in cannonData_t
-    glShaderSource(fs, 1, &cannonFragmentShader, nullptr);         // so update the middle point to whatever ship game struct set when shipConfigChanged == true
+void ShipRenderer::initCannons() {                                 
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);                 
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);               
+    std::string cannonVertShader = loadTextFile("shaders/cannon.vert");
+    std::string cannonFragShader = loadTextFile("shaders/cannon.frag");
+    const char* cannonFragShaderChar = cannonFragShader.c_str();
+    const char* cannonVertShaderChar = cannonVertShader.c_str();
+    glShaderSource(vs, 1, &cannonVertShaderChar, nullptr);         
+    glShaderSource(fs, 1, &cannonFragShaderChar, nullptr);        
     glCompileShader(vs);
     glCompileShader(fs);
     cannonShader = glCreateProgram();
@@ -258,15 +262,19 @@ void ShipRenderer::initCannons() {                                 // this init 
     glDeleteShader(fs);
 
     // Cache uniform locations
-    uCannonPositionsLoc = glGetUniformLocation(cannonShader, "uCannonPositions");
-    uCannonAngleLoc = glGetUniformLocation(cannonShader, "uCannonAngle");
-    uShipRotationLoc = glGetUniformLocation(cannonShader, "uShipRotation");
-    uProjectionLoc = glGetUniformLocation(cannonShader, "uProjection");
-    uTextureLoc = glGetUniformLocation(cannonShader, "uTexture");
+    cannonAngleLoc = glGetUniformLocation(cannonShader, "uCannonAngle");
+    cannonShipRotationLoc = glGetUniformLocation(cannonShader, "uShipRotation");
+    cannonProjectionLoc = glGetUniformLocation(cannonShader, "uProjection");
+    cannonTextureLoc = glGetUniformLocation(cannonShader, "uTexture");
+    cannonGridDimensionsLoc = glGetUniformLocation(cannonShader, "uGridDimensions");
+
+    glUseProgram(cannonShader);
+
+    // set cannon grid dimensions once
+    glUniform2fv(cannonGridDimensionsLoc, 1, glm::value_ptr(cannonGridDimensions));
 
     // Set projection once
-    glUseProgram(cannonShader);
-    glUniformMatrix4fv(uProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     struct CannonVertex {
         float x, y;
@@ -293,13 +301,30 @@ void ShipRenderer::initCannons() {                                 // this init 
 
     glGenVertexArrays(1, &cannonVAO);
     glGenBuffers(1, &cannonVBO);
+    glGenBuffers(1, &cannonPositionsVBO);
+
     glBindVertexArray(cannonVAO);
+
     glBindBuffer(GL_ARRAY_BUFFER, cannonVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(cannonQuad), cannonQuad, GL_STATIC_DRAW);
+
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(CannonVertex), (void*)0);
     glEnableVertexAttribArray(0);
+
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(CannonVertex), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
+
+    int cannonStrideSize = sizeof(glm::vec2) + sizeof(float); // cannon position x,y + cannon textureID
+
+    glBindBuffer(GL_ARRAY_BUFFER, cannonPositionsVBO);
+    glVertexAttribDivisor(2, 1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, cannonStrideSize, (void*)0);
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribDivisor(3, 1);
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, cannonStrideSize, (void*)(sizeof(glm::vec2)));
+    glEnableVertexAttribArray(3);
+
     glBindVertexArray(0);
 
     cannonTexture = loadTextureBlurry("cannon.png");
@@ -307,7 +332,12 @@ void ShipRenderer::initCannons() {                                 // this init 
 
 void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
     // iterate through cannons and put data in contiguous array
-    std::vector<glm::vec2> cannonPositions;
+    typedef struct {
+        glm::vec2 position;
+        float color;
+    } cannonStride;
+
+    std::vector<cannonStride> strides;
 
     //if (cells[i].cellAlive) { but done in the ship game logic instead
     for(int i = 0; i < shipCount; ++i) {
@@ -315,14 +345,18 @@ void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
         cannonData_t cannonData = ship.cannonData;
 
         for(int j = 0; j < cannonData.count; ++j) {
-            cannonPositions.push_back(cannonData.pos[j]);
+            cannonStride stride;
+            stride.position = cannonData.pos[j];
+            stride.color = (float)cannonData.colors[j];
+
+            strides.push_back(stride);
         }
     }
 
-    cannonCount = cannonPositions.size();
+    cannonCount = strides.size();
 
-    glUseProgram(cannonShader);
-    glUniform2fv(uCannonPositionsLoc, cannonCount, glm::value_ptr(cannonPositions[0]));
+    glBindBuffer(GL_ARRAY_BUFFER, cannonPositionsVBO);
+    glBufferData(GL_ARRAY_BUFFER, cannonCount * sizeof(cannonStride), &strides[0], GL_STATIC_DRAW);
 }
 
 void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRotation) {
@@ -342,22 +376,25 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
 
     // Set projection once
     glUseProgram(cannonShader);
-    glUniformMatrix4fv(uProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, cannonTexture);
-    glUniform1i(uTextureLoc, 1);
+    glUniform1i(cannonTextureLoc, 1);
 
     // Upload angle
-    glUniform1f(uCannonAngleLoc, cannonAngle);
+    glUniform1f(cannonAngleLoc, cannonAngle);
 
     // Ship rotation
-    glm::mat3 rotationMatrix = glm::mat3(glm::rotate(glm::mat4(1.0f), shipRot, glm::vec3(0.0f, 0.0f, 1.0f)));
-    glUniformMatrix3fv(uShipRotationLoc, 1, GL_FALSE, glm::value_ptr(rotationMatrix));
+    glUniform1f(cannonShipRotationLoc, shipRot);
 
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, cannonCount);
     glBindVertexArray(0);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+/////////                             OpenGL Render Part                               ////////
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
     // check if any config changed, if any of the ship config changed need to update the entire config in the gpu
@@ -384,6 +421,8 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
         shipData_t &ship = ships[i];
         shipsRotation.push_back(ship.shipRot);
     }
+
+    // stuff like renderCannons should actually iterate through all the ships itself, and then you can extract the cannon angle, and the ship rot angle, inside the function instead of here
 
     // render cannon with gathered data from all the ship structs
     drawGrid(shipsRotation[0]); // ship is probably always stored as ship 0 and never gets destroyed, maybe add a property field for main ship

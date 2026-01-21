@@ -451,6 +451,16 @@ g_aspect = (float)app.width / (float)app.height;
     emscripten_set_mouseup_callback("#canvas", nullptr, EM_TRUE, onMouseUp);
     emscripten_set_mousemove_callback("#canvas", nullptr, EM_TRUE, onMouseMove);
 
+
+    int w, h, c;
+unsigned char* test = stbi_load("shaders/annon.vert", &w, &h, &c, 0);
+if (test) {
+    printf("stbi can see the file!\n");
+    stbi_image_free(test);
+} else {
+    printf("stbi also can't see it\n");
+}
+
     // Start main loop
     emscripten_set_main_loop(mainLoop, 0, 1);
     

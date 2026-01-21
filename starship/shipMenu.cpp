@@ -47,8 +47,26 @@ void ShipMenu::render() {
     renderer2d->drawRoundedRect(anchor, backWidth, backHeight, 1.4, 12.0f * (height / 2000.0), glm::vec4(0.0, 0.0, 0.0, 1.0));
     renderer2d->flush();
     buttonManager->drawButtons();
-    drawTriangleAtCursor(); 
     drawMenuTriangle();
+    drawTriangleAtCursor(); 
+}
+
+bool ShipMenu::isCursorInsideMenu(glm::vec2 cursorPos) {
+    float cursorX = (cursorPos.x+1.0)/2.0 * width;
+    float cursorY = (cursorPos.y+1.0)/2.0 * height;
+    bool insideMenu = anchor.x < cursorX && cursorX < anchor.x + backWidth &&
+                      anchor.y < cursorY && cursorY < anchor.y + backHeight;
+    return insideMenu;
+}
+
+void ShipMenu::unselectButtons() {
+    // unselect clicked state
+    menuCursorSelect.canDrawTriangleAtCursor = false;
+    menuCursorSelect.type = CELL_NONE;
+    menuCursorSelect.buttonId = -1;
+
+    for(int i = 0; i < buttons.size(); ++i)
+        buttons[i]->color = glm::vec4(22.0/255.0, 22.0/255.0, 22.0/255.0, 1.0f);
 }
 
 CellTexCoords ShipMenu::getRandomAtlasCoords(AtlasSprite sprite, int cellNumber) {
@@ -304,7 +322,7 @@ void ShipMenu::drawMenuTriangle() {
     if (cellMenuVAO == 0) printf("ERROR: cellMenuVAO is 0\n");
     if (cellMenu.transforms.size() == 0) printf("WARNING: transforms.size() is 0, nothing to draw\n");
     
-    printf("Drawing %zu menu triangles\n", cellMenu.transforms.size());
+    //printf("Drawing %zu menu triangles\n", cellMenu.transforms.size());
 
     glBindVertexArray(cellMenuVAO);
     glDrawArraysInstanced(GL_TRIANGLES, 0, 3, cellMenu.transforms.size());

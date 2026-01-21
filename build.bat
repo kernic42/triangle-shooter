@@ -16,6 +16,8 @@ emcc -std=c++17 -O2 ^
  -I./textRenderer ^
  -I./renderer2d ^
  -I./starship ^
+ --preload-file shaders/cannon.vert ^
+ --preload-file shaders/cannon.frag ^
  --preload-file atlas.png ^
  --preload-file background_tile.png ^
  --preload-file crack_mask.png ^

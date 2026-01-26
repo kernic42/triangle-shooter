@@ -371,11 +371,9 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glUseProgram(cannonShader);
-    glBindVertexArray(cannonVAO);
-
     // Set projection once
     glUseProgram(cannonShader);
+    glBindVertexArray(cannonVAO);
     glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     glActiveTexture(GL_TEXTURE1);
@@ -384,11 +382,137 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
 
     // Upload angle
     glUniform1f(cannonAngleLoc, cannonAngle);
-
-    // Ship rotation
     glUniform1f(cannonShipRotationLoc, shipRot);
 
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, cannonCount);
+    glBindVertexArray(0);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////
+/////////                            OpenGL Bullets Part                               ////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+void ShipRenderer::initBullets() {                                 
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);                 
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);               
+    std::string cannonVertShader = loadTextFile("shaders/bullet.vert");
+    std::string cannonFragShader = loadTextFile("shaders/bullet.frag");
+    const char* cannonFragShaderChar = cannonFragShader.c_str();
+    const char* cannonVertShaderChar = cannonVertShader.c_str();
+    glShaderSource(vs, 1, &cannonVertShaderChar, nullptr);         
+    glShaderSource(fs, 1, &cannonFragShaderChar, nullptr);        
+    glCompileShader(vs);
+    glCompileShader(fs);
+    bulletShader = glCreateProgram();
+    glAttachShader(bulletShader, vs);
+    glAttachShader(bulletShader, fs);
+    glLinkProgram(bulletShader);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    bulletTexture = loadTexture("bullet.png");
+
+    glGenVertexArrays(1, &bulletVAO);
+    glGenBuffers(1, &bulletVBO);
+    glGenBuffers(1, &bulletAttributesVBO);
+
+    glUseProgram(bulletShader);
+    glBindVertexArray(bulletVAO);
+
+    // get uniform locations
+    bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
+    bulletGridDimensionsLoc = glGetUniformLocation(bulletShader, "uGridDimensions");
+    bulletTextureLoc = glGetUniformLocation(bulletShader, "uTexture");
+
+    // upload uGridDimensions once
+    glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
+
+    // static data
+    int staticStrideSize = 4 * sizeof(float);
+    glBindBuffer(GL_ARRAY_BUFFER, bulletVBO);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, staticStrideSize, (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, staticStrideSize, (void*)(2*sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    float s = 0.02f;  // adjust to taste
+    float quad[] = {
+        // triangle 1
+        -s, -s,  0.0f, 0.0f,
+        s, -s,  1.0f, 0.0f,
+        s,  s,  1.0f, 1.0f,
+        // triangle 2
+        -s, -s,  0.0f, 0.0f,
+        s,  s,  1.0f, 1.0f,
+        -s,  s,  0.0f, 1.0f
+    };
+
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+
+    // dynamic data
+    int dynamicStrideSize = sizeof(glm::vec2) + sizeof(glm::vec2) + sizeof(float) + sizeof(float) + sizeof(float);
+
+    printf("bulletData_t size: %d\n", sizeof(bulletData_t));
+    printf("dynamicStrideSize size: %d\n", dynamicStrideSize);
+
+    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
+    
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, origin));
+    glVertexAttribDivisor(2, 1);
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, direction));
+    glVertexAttribDivisor(3, 1);
+    glEnableVertexAttribArray(3);
+
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, velocity));
+    glVertexAttribDivisor(4, 1);
+    glEnableVertexAttribArray(4);
+
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, gridIndex));
+    glVertexAttribDivisor(5, 1);
+    glEnableVertexAttribArray(5);
+
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, startTime));
+    glVertexAttribDivisor(6, 1);
+    glEnableVertexAttribArray(6);
+
+    glBindVertexArray(0);
+}
+
+void ShipRenderer::renderBullets() {
+    glUseProgram(bulletShader);
+    glBindVertexArray(bulletVAO);
+
+    glUniform1f(bulletTimeLoc, emscripten_get_now() / 1000.0f);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, bulletTexture);
+    glUniform1i(bulletTextureLoc, 0);
+
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, bulletCount);
+
+    glBindVertexArray(0);
+}
+
+void ShipRenderer::updateBullets(shipData_t *ships, int shipCount) {
+    shipData_t &ship = ships[0];
+    // copy bullets contained within ship inside vertex attributes
+
+    //layout(location = 2) in vec2 aOrigin; // per bullet
+    //layout(location = 3) in vec2 aDirection; // per bullet
+    //layout(location = 4) in float aVelocity; // per bullet
+    //layout(location = 5) in float aGridIndex; // per bullet
+    //layout(location = 6) in float aStartTime; // per bullet
+    
+    bulletCount = ship.bulletDataCount;// ship.bulletDataCount;
+
+    glUseProgram(bulletShader); // not sure these are necessary
+    glBindVertexArray(bulletVAO); //
+    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
+    glBufferData(GL_ARRAY_BUFFER, bulletCount * sizeof(bulletData_t), &ship.bulletData[0], GL_STATIC_DRAW);
+
     glBindVertexArray(0);
 }
 
@@ -409,9 +533,10 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
         }
     }
 
-    if(anyConfigChanged) {
+    if(anyConfigChanged) { // maybe just update the config for the thing that changed..
         updateCannonPositions(ships, count);
         updateCellUniforms(ships, count);
+        updateBullets(ships, count);
         printf("ship config updated\n");
     }
     
@@ -428,4 +553,5 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
     drawGrid(shipsRotation[0]); // ship is probably always stored as ship 0 and never gets destroyed, maybe add a property field for main ship
     renderCells(shipsRotation);
     renderCannons(cursorPos, shipsRotation);
+    renderBullets();
 }

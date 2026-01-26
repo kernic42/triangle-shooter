@@ -59,6 +59,7 @@ public:
         };
     };
 
+    int f = 0;
     std::vector<TriangleCell> cells;
 
     // Rotation state
@@ -113,6 +114,8 @@ public:
     void updateCannonPositions();
     void updateCellUniforms();
     void newAttackCell(CellName name, int cellNumber);
+
+    void shotBullet();
     
     // Input handlers
     void onMouseDown(int button, float x, float y);

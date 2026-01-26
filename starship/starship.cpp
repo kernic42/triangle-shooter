@@ -73,6 +73,7 @@ void Starship::updateCellUniforms() {
 }
 
 void Starship::init() { // function where we should init everything..
+    shipRenderer.initBullets();
     shipRenderer.initGrid();
     shipRenderer.initCannons();
     shipRenderer.initCellRendering();
@@ -364,8 +365,27 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
     updateCannonPositions();
 }
 
+void Starship::shotBullet() {
+    // for now just try if it works by making a bunch of bullet spawn from the middle of the screen with some direction, just append to buffer when click
+    bulletData_t bullet;
+    bullet.direction = glm::vec2(0.707 * aspect, 0.707);
+    bullet.gridIndex = 0;
+    bullet.startTime = emscripten_get_now() / 1000.0f;
+    bullet.velocity = 1.2;
+    
+    int bulletCount = 5;
+    for(int i = 0; i < bulletCount; ++i) {
+        bullet.origin = glm::vec2(0.0, -0.2 + (i*0.1));
+
+        shipData.bulletData[shipData.bulletDataCount] = bullet;
+        shipData.bulletDataCount += 1;
+    }
+
+    shipData.configChanged = true;
+}
+
 void Starship::onMouseDown(int button, float x, float y) {
-    if (button == 2) {
+    if (button == 2) { // right click
         isDragging = true;
         dragStartRotation = currentRotation;
         
@@ -379,6 +399,8 @@ void Starship::onMouseDown(int button, float x, float y) {
     
     // goal: ship knows what state the menu is in, ship still detects when click inside ship and act accordingly to menu state
     if(button == 0) { // left click
+        shotBullet();
+
         if(shipMenu.menuCursorSelect.canDrawTriangleAtCursor) {
             bool couldPurchase = placeCell(glm::vec2(x, y));
 

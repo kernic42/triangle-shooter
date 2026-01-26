@@ -27,7 +27,15 @@ typedef struct {
     glm::mat3x2 texCoords[MAX_CANNON_COUNT]; // static
     glm::vec4 colors[MAX_CANNON_COUNT];      // static
     int count = 0;
-} cellHullData_t;
+} cellHullData_t;// I think these could be arrays of struct so that we jsut send array to gpu? needs to be packed at float
+
+typedef struct {
+    glm::vec2 origin;
+    glm::vec2 direction;
+    float velocity;
+    float gridIndex;
+    float startTime;
+} bulletData_t;
 
 typedef struct {
     bool configChanged = false;
@@ -35,6 +43,8 @@ typedef struct {
     float shipRot;                           // dynamic each frame
     cannonData_t cannonData;
     cellHullData_t cellHullData;
+    bulletData_t bulletData[MAX_CANNON_COUNT];
+    int bulletDataCount = 0;
 } shipData_t;
 
 ////////////////////////////////////////////////////////

@@ -16,11 +16,11 @@ emcc -std=c++17 -O2 ^
  -I./textRenderer ^
  -I./renderer2d ^
  -I./starship ^
- --preload-file shaders/cannon.vert ^
- --preload-file shaders/cannon.frag ^
+ --preload-file shaders ^
  --preload-file atlas.png ^
  --preload-file background_tile.png ^
  --preload-file crack_mask.png ^
+ --preload-file bullet.png ^
  --preload-file cannon.png ^
  --preload-file assets/fonts/roboto/Roboto-Medium.ttf@fonts/Roboto-Medium.ttf ^
  main.cpp ^

@@ -19,10 +19,6 @@ class ShipRenderer {
     float width = 0;
     float height = 0;
 
-    // max settings
-    static const int MAX_CANNONS = 256;
-    int cannonCount = 0;
-
     // grid OpenGL stuff
     GLuint gridShader, gridVAO, gridVBO;
     GLuint gridRotationLoc, gridProjectionLoc;
@@ -35,7 +31,15 @@ class ShipRenderer {
     // cannon OpenGL stuff
     GLuint cannonShader, cannonVAO, cannonVBO, cannonPositionsVBO, cannonTexture;
     GLuint cannonAngleLoc, cannonShipRotationLoc, cannonProjectionLoc, cannonTextureLoc, cannonGridDimensionsLoc;
-    glm::vec2 cannonGridDimensions = glm::vec2(2.0, 2.0); // just check if the shader still works for now
+    glm::vec2 cannonGridDimensions = glm::vec2(2.0, 2.0);
+    static const int MAX_CANNONS = 256;
+    int cannonCount = 0;
+
+    // bullet OpenGL stuff
+    GLuint bulletShader, bulletVAO, bulletVBO, bulletAttributesVBO, bulletTexture;
+    GLuint bulletTimeLoc, bulletGridDimensionsLoc, bulletTextureLoc;
+    glm::vec2 bulletGridDimensions = glm::vec2(1.0, 1.0);
+    int bulletCount = 0;
 
     public:
 
@@ -58,6 +62,11 @@ class ShipRenderer {
     void initCannons();
     void renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRotation);
     void updateCannonPositions(shipData_t *ships, int shipCount);
+
+    // OpenGL Bullets Part
+    void initBullets();
+    void renderBullets();
+    void updateBullets(shipData_t *ships, int shipCount);
     
     // render part
     void render(shipData_t *ships, int count, glm::vec2 cursorPos); // we use ptr to put all data from ships structs in a same contiguous array, that can be passed with a single glDrawArraysInstanced call

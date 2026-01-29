@@ -8,9 +8,11 @@ layout(location = 3) in vec2 aDirection; // per bullet
 layout(location = 4) in float aVelocity; // per bullet
 layout(location = 5) in float aGridIndex; // per bullet
 layout(location = 6) in float aStartTime; // per bullet
+layout(location = 7) in float aShipRotation; // per bullet
 
 uniform float uTime;
 uniform vec2 uGridDimensions;
+uniform mat4 uProjection;
 
 out vec2 vTexCoord;
 
@@ -19,16 +21,22 @@ void main() {
     float row = floor(aGridIndex / uGridDimensions.x);
     float column = mod(aGridIndex, uGridDimensions.x);
 
-    float rowHeight = 1.0 / row;
-    float columnWidth = 1.0 / column;
+    float columnWidth = 1.0 / uGridDimensions.x;
+    float rowHeight = 1.0 / uGridDimensions.x;
 
     float u = columnWidth * column + aTexCoord.x * columnWidth;
     float v = rowHeight * row + aTexCoord.y * rowHeight;
-    vTexCoord = vec2(aTexCoord.x, aTexCoord.y);
+    vTexCoord = vec2(u, v);
 
-    // bullet advance in aDirection, following timePassed scaled by aVelocity
+    // bullet advance in aDirection, following timePassed scaled by aVelocity (maybe should use v = d/t to calculate ray path on cpu)
     float timePassed = uTime - aStartTime;
-    vec2 traveledDist = aDirection * (timePassed * aVelocity);
-    vec2 translate = aOrigin + traveledDist;
-    gl_Position = vec4(aPos + translate, 0.0, 1.0);
+    vec2 bulletPath = aDirection * (timePassed * aVelocity);
+
+    float c = cos(aShipRotation);
+    float s = sin(aShipRotation);
+    vec2 rotatedOrigin = mat2(c, s, -s, c) * aOrigin;
+
+    vec2 bulletTranslate = rotatedOrigin + bulletPath;
+
+    gl_Position = uProjection * vec4(aPos + bulletTranslate, 0.0, 1.0);
 }

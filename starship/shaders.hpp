@@ -35,6 +35,7 @@ typedef struct {
     float velocity;
     float gridIndex;
     float startTime;
+    float shipRotation;
 } bulletData_t;
 
 typedef struct {
@@ -43,7 +44,7 @@ typedef struct {
     float shipRot;                           // dynamic each frame
     cannonData_t cannonData;
     cellHullData_t cellHullData;
-    bulletData_t bulletData[MAX_CANNON_COUNT];
+    bulletData_t bulletData[MAX_CANNON_COUNT * 50];
     int bulletDataCount = 0;
 } shipData_t;
 

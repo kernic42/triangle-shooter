@@ -422,10 +422,14 @@ void ShipRenderer::initBullets() {
     // get uniform locations
     bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
     bulletGridDimensionsLoc = glGetUniformLocation(bulletShader, "uGridDimensions");
+    bulletProjectionLoc = glGetUniformLocation(bulletShader, "uProjection");
     bulletTextureLoc = glGetUniformLocation(bulletShader, "uTexture");
 
     // upload uGridDimensions once
     glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
+
+    // upload projection once
+    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  &projection[0][0]);
 
     // static data
     int staticStrideSize = 4 * sizeof(float);
@@ -436,7 +440,7 @@ void ShipRenderer::initBullets() {
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, staticStrideSize, (void*)(2*sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    float s = 0.02f;  // adjust to taste
+    float s = 0.004f;  // adjust to taste
     float quad[] = {
         // triangle 1
         -s, -s,  0.0f, 0.0f,
@@ -457,26 +461,30 @@ void ShipRenderer::initBullets() {
     printf("dynamicStrideSize size: %d\n", dynamicStrideSize);
 
     glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
-    
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, origin));
+
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, origin));
     glVertexAttribDivisor(2, 1);
     glEnableVertexAttribArray(2);
 
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, direction));
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, direction));
     glVertexAttribDivisor(3, 1);
     glEnableVertexAttribArray(3);
 
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, velocity));
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, velocity));
     glVertexAttribDivisor(4, 1);
     glEnableVertexAttribArray(4);
 
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, gridIndex));
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, gridIndex));
     glVertexAttribDivisor(5, 1);
     glEnableVertexAttribArray(5);
 
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, dynamicStrideSize, (void*)offsetof(bulletData_t, startTime));
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, startTime));
     glVertexAttribDivisor(6, 1);
     glEnableVertexAttribArray(6);
+
+    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, shipRotation));
+    glVertexAttribDivisor(7, 1);
+    glEnableVertexAttribArray(7);
 
     glBindVertexArray(0);
 }
@@ -508,8 +516,6 @@ void ShipRenderer::updateBullets(shipData_t *ships, int shipCount) {
     
     bulletCount = ship.bulletDataCount;// ship.bulletDataCount;
 
-    glUseProgram(bulletShader); // not sure these are necessary
-    glBindVertexArray(bulletVAO); //
     glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
     glBufferData(GL_ARRAY_BUFFER, bulletCount * sizeof(bulletData_t), &ship.bulletData[0], GL_STATIC_DRAW);
 

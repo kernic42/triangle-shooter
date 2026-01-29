@@ -365,6 +365,7 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
     updateCannonPositions();
 }
 
+/*
 void Starship::shotBullet() {
     // for now just try if it works by making a bunch of bullet spawn from the middle of the screen with some direction, just append to buffer when click
     bulletData_t bullet;
@@ -379,6 +380,32 @@ void Starship::shotBullet() {
 
         shipData.bulletData[shipData.bulletDataCount] = bullet;
         shipData.bulletDataCount += 1;
+    }
+
+    shipData.configChanged = true;
+}*/
+
+void Starship::shotBullet() {
+    // for now just try if it works by making a bunch of bullet spawn from the middle of the screen with some direction, just append to buffer when click
+
+    float dirX = cursorX * aspect; // prob needs to be a property inside ship struct instead
+    float dirY = cursorY;
+    float cannonAngle = atan2f(dirY, dirX);
+
+    bulletData_t bullet;
+    bullet.direction = glm::vec2(cos(cannonAngle), sin(cannonAngle));
+    bullet.gridIndex = 0;
+    bullet.startTime = emscripten_get_now() / 1000.0f;
+    bullet.velocity = 0.2;
+    
+    for(int i = 0; i < cells.size(); ++i) {
+        if(cells[i].cellAlive) {
+            bullet.origin = cells[i].middleOfTriangle;
+            bullet.shipRotation = currentRotation;
+
+            shipData.bulletData[shipData.bulletDataCount] = bullet;
+            shipData.bulletDataCount += 1;
+        }
     }
 
     shipData.configChanged = true;

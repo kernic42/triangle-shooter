@@ -37,7 +37,7 @@ class ShipRenderer {
 
     // bullet OpenGL stuff
     GLuint bulletShader, bulletVAO, bulletVBO, bulletAttributesVBO, bulletTexture;
-    GLuint bulletTimeLoc, bulletGridDimensionsLoc, bulletTextureLoc;
+    GLuint bulletTimeLoc, bulletGridDimensionsLoc, bulletProjectionLoc, bulletTextureLoc;
     glm::vec2 bulletGridDimensions = glm::vec2(1.0, 1.0);
     int bulletCount = 0;
 

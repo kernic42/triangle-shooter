@@ -23,6 +23,9 @@ Renderer2D renderer2d;
 ButtonManager buttonManager;
 float g_aspect = 0;
 glm::mat4 projection;
+glm::mat4 projView;
+bool keys[256] = {false};
+int64_t startTimes[256] = {0};
 GLuint backgroundTexture = -1; 
 
 const char* quadVertexShaderSrc = R"(#version 300 es
@@ -132,6 +135,17 @@ EM_BOOL onMouseMove(int eventType, const EmscriptenMouseEvent* e, void* userData
     return EM_TRUE;
 }
 
+EM_BOOL onKeyDown(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
+    if(keys[(unsigned char)e->key[0]] == false) startTimes[(unsigned char)e->key[0]] = emscripten_get_now();
+    keys[(unsigned char)e->key[0]] = true;
+    return EM_FALSE;
+}
+
+EM_BOOL onKeyUp(int eventType, const EmscriptenKeyboardEvent* e, void* userData) {
+    keys[(unsigned char)e->key[0]] = false;
+    return EM_FALSE;
+}
+
 GLuint compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
@@ -228,10 +242,10 @@ void updateFBOTextureUV() {
     // check how many tiles can fit, following the same aspect ratio, over width
     float tileCountX = tileCountY / tileAspect * screenAspect;
 
-    float offsetX = -fmod(tileCountX, 1.0) / 2.0 +        // offset by the fraction that cell takes
+    float offsetX = 2.0 * -ship.shipTranslate.x / tileAspect -fmod(tileCountX, 1.0) / 2.0 +        // offset by the fraction that cell takes
                     ((int)floor(tileCountX)+1) % 2 * 0.5; // cell count that fits is even(without remainder), then do + half offset
 
-    float offsetY = -fmod(tileCountY, 1.0) / 2.0 +        // offset by the fraction that cell takes
+    float offsetY = 2.0 * -ship.shipTranslate.y -fmod(tileCountY, 1.0) / 2.0 +        // offset by the fraction that cell takes
                     ((int)floor(tileCountY)+1) % 2 * 0.5; // cell count that fits is even(without remainder), then do + half offset
 
     float vertices[] = {
@@ -322,6 +336,8 @@ void renderToFBO() {
     glBlitFramebuffer(0, 0, app.width, app.height, 0, 0, app.width, app.height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    updateFBOTextureUV();
 }
 
 void renderToScreen() {
@@ -450,6 +466,9 @@ g_aspect = (float)app.width / (float)app.height;
     emscripten_set_mousedown_callback("#canvas", nullptr, EM_TRUE, onMouseDown);
     emscripten_set_mouseup_callback("#canvas", nullptr, EM_TRUE, onMouseUp);
     emscripten_set_mousemove_callback("#canvas", nullptr, EM_TRUE, onMouseMove);
+
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onKeyDown);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, EM_TRUE, onKeyUp);
 
 
     int w, h, c;

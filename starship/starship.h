@@ -89,6 +89,9 @@ public:
     ShipMenu shipMenu;
     int energy = 10000;
 
+    glm::vec2 shipTranslate = glm::vec2(0.0, 0.0);
+    glm::vec2 translateSpeed = glm::vec2(0.0, 0.0);
+
     static const int MAX_CANNONS = 256;
     int cannonCount = 0;
 

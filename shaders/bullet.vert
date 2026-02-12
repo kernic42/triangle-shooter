@@ -5,10 +5,11 @@ layout(location = 0) in vec2 aPos; // per vertex
 layout(location = 1) in vec2 aTexCoord; // per vertex
 layout(location = 2) in vec2 aOrigin; // per bullet
 layout(location = 3) in vec2 aDirection; // per bullet
-layout(location = 4) in float aVelocity; // per bullet
-layout(location = 5) in float aGridIndex; // per bullet
-layout(location = 6) in float aStartTime; // per bullet
-layout(location = 7) in float aShipRotation; // per bullet
+layout(location = 4) in vec2 aShipTranslate; // per bullet
+layout(location = 5) in float aShipRotation; // per bullet
+layout(location = 6) in float aVelocity; // per bullet
+layout(location = 7) in float aGridIndex; // per bullet
+layout(location = 8) in float aStartTime; // per bullet
 
 uniform float uTime;
 uniform vec2 uGridDimensions;
@@ -36,7 +37,7 @@ void main() {
     float s = sin(aShipRotation);
     vec2 rotatedOrigin = mat2(c, s, -s, c) * aOrigin;
 
-    vec2 bulletTranslate = rotatedOrigin + bulletPath;
+    vec2 bulletTranslate = rotatedOrigin + bulletPath + aShipTranslate;
 
     gl_Position = uProjection * vec4(aPos + bulletTranslate, 0.0, 1.0);
 }

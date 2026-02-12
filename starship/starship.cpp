@@ -4,6 +4,10 @@
 #include <emscripten/emscripten.h>
 
 extern glm::mat4 projection;  // access the global
+extern glm::mat4 projView;
+extern bool keys[256];
+extern int64_t startTimes[256];
+glm::mat4 shipModel;
 
 //texture(uCrackTex, vLocalUV).r;
 static GLuint compileShader(GLenum type, const char* src) {
@@ -80,10 +84,142 @@ void Starship::init() { // function where we should init everything..
     shipMenu.init();
 }
 
+float easeInQuad(float number) {
+return number * number;
+}
+
+ constexpr inline bool floatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon())
+{
+    return std::fabs(a - b) < epsilon;
+}
+
 void Starship::draw() {
     // update ship data struct before sending it
     shipData.shipRot = currentRotation;
     shipRenderer.render(&shipData, 1, glm::vec2(cursorX, cursorY));
+
+    // get normalized direction from input
+    float xLength = -(float)keys['a'] + (float)keys['d'];
+    float yLength = -(float)keys['s'] + (float)keys['w'];
+    float lineLength = sqrt(xLength*xLength + yLength*yLength);
+    glm::vec2 normalizedDirection{0};
+    if(lineLength) normalizedDirection = glm::vec2(xLength/lineLength, yLength/lineLength);
+
+    // 
+    float acceleration = 0.001; // idk if useful but v = d/t and acceleration(I think) a = d/t^2
+    float maxSpeed = 0.01 / 4.0;
+    int64_t now = emscripten_get_now();
+    float speedIncreaseDuration = 650; // speed increase following 
+    
+    float progressY = (now - std::max(startTimes['s'], startTimes['w'])) / speedIncreaseDuration;
+    float progressX = (now - std::max(startTimes['a'], startTimes['d'])) / speedIncreaseDuration;
+
+    float progress = 0.0;
+    if((keys['s'] || keys['w']) && (keys['a'] || keys['d'])) {
+        progress = std::max(progressY, progressX);
+    } else if(keys['s'] || keys['w']) {
+        progress = progressY;
+    } else if(keys['a'] || keys['d']) {
+        progress = progressX;
+    }
+
+    float translateSpeed = progress;//easeInQuad(progress);
+    if(translateSpeed > 1.0) translateSpeed = 1.0;
+
+    // later need to add translateSpeed into view, then send that projView
+    float advanceX = normalizedDirection.x * translateSpeed * 1.0 / 60.0; // needs to rely on delta time instead of 1/60
+    float advanceY = normalizedDirection.y * translateSpeed * 1.0 / 60.0; // we want to advance a specific distance in a specific delta time, normalize delta time, multiply by distance we want, delta time is ease
+                                                                          // I just realized since ease is x*x it kinda looks like d/t^2 
+                                                                          // at first I'd like to translate slower
+                                                                          // then I'd like to follow a constant speed
+                                                                          // so velocity is ease * (now - start)
+                                                                          
+                                                                          // of I ever want to calculate how much ship will move in x time, idk how because of ease at beginning
+                                                                          // maybe if measurement under speedDuration just pass that to the ease
+                                                                          // if measurment above speedDuration calculate where user is at speedDuration, then remove that from total, then calculate + remainder at constant speed
+
+    // directional drag needs to accumulate in direction that user goes in, until some threshold
+    float dragRange = 0.039;
+    float dragIncrement = 0.0012; // should actually be linked to delta time.......
+    float dragIncrementToMiddle = 0.0005;
+
+    static glm::vec2 directionalDrag{0};
+    directionalDrag -= normalizedDirection * dragIncrement;
+    if(directionalDrag.x > dragRange) directionalDrag.x = dragRange;
+    if(directionalDrag.x < -dragRange) directionalDrag.x = -dragRange;
+    if(directionalDrag.y > dragRange) directionalDrag.y = dragRange;
+    if(directionalDrag.y < -dragRange) directionalDrag.y = -dragRange;
+
+    // what I had in mind would need to make oscillation become 0 as we go away from center, then with whatever's left take direction shipMiddle to origin (check when reach radius length in that dir)
+    // would need to check at what angle ship collide with circle path, and change circle path angle so that it start there insteads
+    // this is kinda hard because I'm retarded so maybe keep it like this for now
+
+    static float diff = 0;
+    static int tick = 0;
+    float delta = (float(tick % 120) / 120.0); // fake delta time for now
+    float circleRadius = 0.0057;
+
+    // want to go in direction toward origin specifically
+    float dragDist = sqrt(directionalDrag.x*directionalDrag.x + directionalDrag.y*directionalDrag.y);
+    glm::vec2 dirDrag = glm::vec2(directionalDrag.x/dragDist, directionalDrag.y/dragDist);
+
+    // then stop when within radius
+    bool notDraggingTowardMiddle = true;
+    bool notPressingX = !normalizedDirection.x;
+    bool notPressingY = !normalizedDirection.y;
+    bool farEnoughFromMid = dragDist > circleRadius + dragIncrementToMiddle;
+
+    static int64_t lastPress = now;
+    if(normalizedDirection.x || normalizedDirection.y) lastPress = now;
+    bool firstPressWithinLast50ms = now - lastPress < 10;//cheat if decides to spam
+
+    if(firstPressWithinLast50ms) { // kickstart..
+        directionalDrag -= normalizedDirection * dragIncrement;
+        printf("kickstart\n");
+    }
+
+    if(notPressingX && farEnoughFromMid) {
+        directionalDrag.x -= dragIncrementToMiddle * dirDrag.x;
+        notDraggingTowardMiddle = false;
+    }
+    if(notPressingY && farEnoughFromMid) {
+        directionalDrag.y -= dragIncrementToMiddle * dirDrag.y;  // the goal is to check if we're far enough from middle to apply drag
+        notDraggingTowardMiddle = false;
+    }
+
+    bool shipIdleCloseToMiddle = dragDist < circleRadius + dragIncrementToMiddle;
+    // dist is under radius when drag dir is under radius
+    bool distIsUrnderRadius = dragDist < circleRadius;
+    if((notDraggingTowardMiddle && shipIdleCloseToMiddle) || distIsUrnderRadius) {
+        directionalDrag.x = cos(diff + (delta * 2.0 * 3.14159)) * circleRadius; // actually need to smoothly give a different cos value.. not rand
+        directionalDrag.y = sin(diff + (delta * 2.0 * 3.14159)) * circleRadius;
+
+        tick++;
+        printf("true\n");
+    } else {
+        diff = -(delta * 2.0 * 3.14159) + atan2f(directionalDrag.y, directionalDrag.x);
+        if(!notDraggingTowardMiddle) printf("notDraggingTowardMiddle\n");
+        if(!shipIdleCloseToMiddle) printf("shipIdleCloseToMiddle\n");
+        printf("false\n");
+    }
+
+    shipTranslate.x -= advanceX; // we want to remove from view
+    shipTranslate.y -= advanceY;
+
+    // this literally just freeze oscilation and then it undo dir when it drags toward origin
+
+    // the more complicated thing I had in mind was make oscillation vanish as you go toward origin, then create dir from ship to origin, then go in that direction until intersect radius
+    // I think an issue it had is that oscillation wouldn't vanish, so it would undo dir to go toward origin, but then it would suddenly change the result when oscillation would be updated to intersect
+    // beside the fact that atan2f returns -pi to pi while cos takes in 0 to 2pi
+
+    //printf("advanceY: %f\n", advanceY);
+    //printf("translateSpeed: %f\n", translateSpeed);
+
+    glm::mat4 view = glm::translate(glm::mat4(1), glm::vec3(shipTranslate.x, shipTranslate.y, 0.0));
+    projView = projection * view;
+    float dx = directionalDrag.x;
+    float dy = directionalDrag.y; // both neg
+    shipModel = glm::translate(glm::mat4(1.0), glm::vec3(-shipTranslate.x + dx, -shipTranslate.y + dy, 0.0));
     
     shipMenu.render();
 }
@@ -175,9 +311,9 @@ int Starship::getSelectedCellId(glm::vec2 cursorPos) {
     // iterate through cells in order
     for(int i = 0; i < cells.size(); ++i) {
         // apply this cell transform to triangleVerts
-        glm::vec4 vert1 = projection * shipRotation * cells[i].transform * triangleVerts[0];
-        glm::vec4 vert2 = projection * shipRotation * cells[i].transform * triangleVerts[1];
-        glm::vec4 vert3 = projection * shipRotation * cells[i].transform * triangleVerts[2];
+        glm::vec4 vert1 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[0]; // vertex, local translate, local rotate, shipModel translate, projView to origin 
+        glm::vec4 vert2 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[1];
+        glm::vec4 vert3 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[2];
 
         // if cursor is inside these triangleVerts, return id of cell
         if(isCursorInsideCell(cursorPos, vert1, vert2, vert3))
@@ -313,8 +449,8 @@ bool Starship::placeCell(glm::vec2 cursorPos) { // when user clicks
     }
 
     if(!neighborsAlive(cellId)) { // not even 1 neighbors is alive
-        // eventPopup(enum::warningSign, "place cell next to neighboring cell");
-        printf("place cell next to neighboring cell\n");
+        // eventPopup(enum::warningSign, "place new cell next to a neighboring cell");
+        printf("place new cell next to a neighboring cell\n");
         return false;
     }
 
@@ -365,29 +501,7 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
     updateCannonPositions();
 }
 
-/*
 void Starship::shotBullet() {
-    // for now just try if it works by making a bunch of bullet spawn from the middle of the screen with some direction, just append to buffer when click
-    bulletData_t bullet;
-    bullet.direction = glm::vec2(0.707 * aspect, 0.707);
-    bullet.gridIndex = 0;
-    bullet.startTime = emscripten_get_now() / 1000.0f;
-    bullet.velocity = 1.2;
-    
-    int bulletCount = 5;
-    for(int i = 0; i < bulletCount; ++i) {
-        bullet.origin = glm::vec2(0.0, -0.2 + (i*0.1));
-
-        shipData.bulletData[shipData.bulletDataCount] = bullet;
-        shipData.bulletDataCount += 1;
-    }
-
-    shipData.configChanged = true;
-}*/
-
-void Starship::shotBullet() {
-    // for now just try if it works by making a bunch of bullet spawn from the middle of the screen with some direction, just append to buffer when click
-
     float dirX = cursorX * aspect; // prob needs to be a property inside ship struct instead
     float dirY = cursorY;
     float cannonAngle = atan2f(dirY, dirX);
@@ -400,6 +514,7 @@ void Starship::shotBullet() {
     
     for(int i = 0; i < cells.size(); ++i) {
         if(cells[i].cellAlive) {
+            bullet.shipTranslate = glm::vec2(shipModel[3][0], shipModel[3][1]);
             bullet.origin = cells[i].middleOfTriangle;
             bullet.shipRotation = currentRotation;
 
@@ -424,7 +539,6 @@ void Starship::onMouseDown(int button, float x, float y) {
         dragStartX = atan2f(y - centerY, x - centerX);
     }
     
-    // goal: ship knows what state the menu is in, ship still detects when click inside ship and act accordingly to menu state
     if(button == 0) { // left click
         shotBullet();
 

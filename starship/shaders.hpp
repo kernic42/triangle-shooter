@@ -30,6 +30,7 @@ typedef struct {
 } cellHullData_t;// I think these could be arrays of struct so that we jsut send array to gpu? needs to be packed at float
 
 typedef struct {
+    glm::vec2 shipTranslate;
     glm::vec2 origin;
     glm::vec2 direction;
     float velocity;

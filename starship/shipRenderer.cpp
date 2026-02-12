@@ -2,6 +2,8 @@
 #include "stbImage/stb_image.h"
 
 extern glm::mat4 projection;
+extern glm::mat4 projView;
+extern glm::mat4 shipModel;
 
 void ShipRenderer::setAspect(float width, float height) {
     this->aspect = width / height;
@@ -104,7 +106,9 @@ void ShipRenderer::drawGrid(float rotation) {
     };
 
     glUniformMatrix3fv(gridRotationLoc, 1, GL_FALSE, rotationMatrix);
-    glUniformMatrix4fv(gridProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glm::mat4 transform = projView * shipModel;
+    glUniformMatrix4fv(gridProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
 
     glBindVertexArray(gridVAO);
     glDrawArrays(GL_LINES, 0, gridVertexCount);
@@ -176,7 +180,8 @@ void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
     glUniformMatrix4fv(hullLocalRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0)));
 
     // Projection
-    glUniformMatrix4fv(hullProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glm::mat4 transform = projView * shipModel;
+    glUniformMatrix4fv(hullProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
     
     // Ship rotation
     float currentRotation = shipsRotation[0]; // just use first rotation for now
@@ -274,7 +279,7 @@ void ShipRenderer::initCannons() {
     glUniform2fv(cannonGridDimensionsLoc, 1, glm::value_ptr(cannonGridDimensions));
 
     // Set projection once
-    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projView));
 
     struct CannonVertex {
         float x, y;
@@ -374,7 +379,9 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
     // Set projection once
     glUseProgram(cannonShader);
     glBindVertexArray(cannonVAO);
-    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glm::mat4 transform = projView * shipModel;
+    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, cannonTexture);
@@ -429,7 +436,7 @@ void ShipRenderer::initBullets() {
     glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
 
     // upload projection once
-    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  &projection[0][0]);
+    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
 
     // static data
     int staticStrideSize = 4 * sizeof(float);
@@ -455,11 +462,6 @@ void ShipRenderer::initBullets() {
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
 
     // dynamic data
-    int dynamicStrideSize = sizeof(glm::vec2) + sizeof(glm::vec2) + sizeof(float) + sizeof(float) + sizeof(float);
-
-    printf("bulletData_t size: %d\n", sizeof(bulletData_t));
-    printf("dynamicStrideSize size: %d\n", dynamicStrideSize);
-
     glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
 
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, origin));
@@ -470,21 +472,25 @@ void ShipRenderer::initBullets() {
     glVertexAttribDivisor(3, 1);
     glEnableVertexAttribArray(3);
 
-    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, velocity));
+    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, shipTranslate));
     glVertexAttribDivisor(4, 1);
     glEnableVertexAttribArray(4);
 
-    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, gridIndex));
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, shipRotation));
     glVertexAttribDivisor(5, 1);
     glEnableVertexAttribArray(5);
 
-    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, startTime));
+    glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, velocity));
     glVertexAttribDivisor(6, 1);
     glEnableVertexAttribArray(6);
 
-    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, shipRotation));
+    glVertexAttribPointer(7, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, gridIndex));
     glVertexAttribDivisor(7, 1);
     glEnableVertexAttribArray(7);
+
+    glVertexAttribPointer(8, 1, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, startTime));
+    glVertexAttribDivisor(8, 1);
+    glEnableVertexAttribArray(8);
 
     glBindVertexArray(0);
 }
@@ -498,6 +504,10 @@ void ShipRenderer::renderBullets() {
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, bulletTexture);
     glUniform1i(bulletTextureLoc, 0);
+
+    // upload projView
+    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
+
 
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, bulletCount);
 
@@ -516,7 +526,7 @@ void ShipRenderer::updateBullets(shipData_t *ships, int shipCount) {
     
     bulletCount = ship.bulletDataCount;// ship.bulletDataCount;
 
-    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO); 
     glBufferData(GL_ARRAY_BUFFER, bulletCount * sizeof(bulletData_t), &ship.bulletData[0], GL_STATIC_DRAW);
 
     glBindVertexArray(0);

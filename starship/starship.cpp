@@ -93,6 +93,20 @@ return number * number;
     return std::fabs(a - b) < epsilon;
 }
 
+bool sameSign(float a, float b) {
+    return (a > 0) == (b > 0);
+}
+
+bool beenTrueAtLeastMs(double &lastMsTrue, bool isTrue, int64_t atLeastDuration) {
+    double now = emscripten_get_now();
+
+    if(!isTrue) lastMsTrue = DBL_MAX;
+    if(isTrue && lastMsTrue == DBL_MAX) lastMsTrue = now;
+    if(now - lastMsTrue >= atLeastDuration) return true;
+
+    return false;
+}
+
 void Starship::draw() {
     // update ship data struct before sending it
     shipData.shipRot = currentRotation;
@@ -139,25 +153,52 @@ void Starship::draw() {
                                                                           // if measurment above speedDuration calculate where user is at speedDuration, then remove that from total, then calculate + remainder at constant speed
 
     // directional drag needs to accumulate in direction that user goes in, until some threshold
-    float dragRange = 0.039;
-    float dragIncrement = 0.0012; // should actually be linked to delta time.......
-    float dragIncrementToMiddle = 0.0005;
-
-    static glm::vec2 directionalDrag{0};
-    directionalDrag -= normalizedDirection * dragIncrement;
-    if(directionalDrag.x > dragRange) directionalDrag.x = dragRange;
-    if(directionalDrag.x < -dragRange) directionalDrag.x = -dragRange;
-    if(directionalDrag.y > dragRange) directionalDrag.y = dragRange;
-    if(directionalDrag.y < -dragRange) directionalDrag.y = -dragRange;
-
-    // what I had in mind would need to make oscillation become 0 as we go away from center, then with whatever's left take direction shipMiddle to origin (check when reach radius length in that dir)
-    // would need to check at what angle ship collide with circle path, and change circle path angle so that it start there insteads
-    // this is kinda hard because I'm retarded so maybe keep it like this for now
+    float dragRange = 0.139 * 3.0;
+    float dragIncrement = 0.0012 * 3.0; // should actually be linked to delta time.......
+    float dragIncrementToMiddle = 0.0005 * 3.0;
 
     static float diff = 0;
     static int tick = 0;
     float delta = (float(tick % 120) / 120.0); // fake delta time for now
-    float circleRadius = 0.0057;
+    float circleRadius = 0.0057 * 3.0;
+    f++;
+
+    // either this or allow first movement to span larger(until it reach max, then it needs to reach smaller max again once it exits it)
+    static glm::vec2 directionalDrag{0,0};    
+    static glm::vec2 dirAtRadius{0,0};
+    static bool firstMaxX = false;
+    static bool firstMaxY = false;
+
+    // set dirRadius when firstMax
+    float dirRadiusX = 0;
+    float dirRadiusY = 0;
+    if(firstMaxX) dirRadiusX = dirAtRadius.x;
+    if(firstMaxY) dirRadiusY = dirAtRadius.y;
+
+    static bool reachedEndYetX = false;
+    static bool reachedEndYetY = false;
+
+    // it always allow for an additional offset in the direction it came from in the max drag window range at first
+    directionalDrag += normalizedDirection * dragIncrement;// * dirDiffCircle;
+    if(directionalDrag.x > dragRange + dirRadiusX) {directionalDrag.x = dragRange + dirRadiusX; if(firstMaxX && !reachedEndYetX) { reachedEndYetX = true; printf("reachedEndYetX\n"); }}
+    if(directionalDrag.x < -dragRange + dirRadiusX) {directionalDrag.x = -dragRange + dirRadiusX;  if(firstMaxX && !reachedEndYetX) { reachedEndYetX = true; printf("reachedEndYetX\n"); }}
+    if(directionalDrag.y > dragRange + dirRadiusY) {directionalDrag.y = dragRange + dirRadiusY;  if(firstMaxY && !reachedEndYetY) { reachedEndYetY = true; printf("reachedEndYetY\n"); }}
+    if(directionalDrag.y < -dragRange + dirRadiusY) {directionalDrag.y = -dragRange + dirRadiusY;  if(firstMaxY && !reachedEndYetY) { reachedEndYetY = true; printf("reachedEndYetY\n"); }}
+
+    // when reached maxDist at least once, if detect under maxDist, set firstMax to false
+    bool reachedSmallestMaxDistX = std::abs(directionalDrag.x) <= dragRange;
+    if(reachedSmallestMaxDistX && reachedEndYetX) {
+        reachedEndYetX = false;
+        firstMaxX = false;
+        printf("underLegitMaxDistX\n");
+    } 
+
+    bool reachedSmallestMaxDistY = std::abs(directionalDrag.y) <= dragRange;
+    if(reachedSmallestMaxDistY && reachedEndYetY) {
+        reachedEndYetY = false;
+        firstMaxY = false;
+        printf("underLegitMaxDistY\n");
+    } 
 
     // want to go in direction toward origin specifically
     float dragDist = sqrt(directionalDrag.x*directionalDrag.x + directionalDrag.y*directionalDrag.y);
@@ -167,59 +208,54 @@ void Starship::draw() {
     bool notDraggingTowardMiddle = true;
     bool notPressingX = !normalizedDirection.x;
     bool notPressingY = !normalizedDirection.y;
-    bool farEnoughFromMid = dragDist > circleRadius + dragIncrementToMiddle;
+    bool shipIdleCloseToMiddle = dragDist <= circleRadius;
 
-    static int64_t lastPress = now;
-    if(normalizedDirection.x || normalizedDirection.y) lastPress = now;
-    bool firstPressWithinLast50ms = now - lastPress < 10;//cheat if decides to spam
+    if(notPressingX && !shipIdleCloseToMiddle) directionalDrag.x -= dragIncrementToMiddle * dirDrag.x; // will reach 0
+    if(notPressingY && !shipIdleCloseToMiddle) directionalDrag.y -= dragIncrementToMiddle * dirDrag.y; 
 
-    if(firstPressWithinLast50ms) { // kickstart..
-        directionalDrag -= normalizedDirection * dragIncrement;
-        printf("kickstart\n");
-    }
+    static bool wasIdle = false;
 
-    if(notPressingX && farEnoughFromMid) {
-        directionalDrag.x -= dragIncrementToMiddle * dirDrag.x;
-        notDraggingTowardMiddle = false;
-    }
-    if(notPressingY && farEnoughFromMid) {
-        directionalDrag.y -= dragIncrementToMiddle * dirDrag.y;  // the goal is to check if we're far enough from middle to apply drag
-        notDraggingTowardMiddle = false;
-    }
+    static glm::vec2 snapshotIdleDir{0};
+    tick++;
 
-    bool shipIdleCloseToMiddle = dragDist < circleRadius + dragIncrementToMiddle;
-    // dist is under radius when drag dir is under radius
-    bool distIsUrnderRadius = dragDist < circleRadius;
-    if((notDraggingTowardMiddle && shipIdleCloseToMiddle) || distIsUrnderRadius) {
-        directionalDrag.x = cos(diff + (delta * 2.0 * 3.14159)) * circleRadius; // actually need to smoothly give a different cos value.. not rand
-        directionalDrag.y = sin(diff + (delta * 2.0 * 3.14159)) * circleRadius;
+    static double st = 0;
+    if(beenTrueAtLeastMs(st, shipIdleCloseToMiddle, 50)) {
+        directionalDrag.x = cos(diff + (delta * 2.0 * 3.14159)) * circleRadius*0.98;
+        directionalDrag.y = sin(diff + (delta * 2.0 * 3.14159)) * circleRadius*0.98;
 
-        tick++;
-        printf("true\n");
+        snapshotIdleDir = directionalDrag;
+
+        if(!wasIdle) { // just done moving
+            wasIdle = true;
+            printf("just done moving\n");
+        }
     } else {
         diff = -(delta * 2.0 * 3.14159) + atan2f(directionalDrag.y, directionalDrag.x);
-        if(!notDraggingTowardMiddle) printf("notDraggingTowardMiddle\n");
-        if(!shipIdleCloseToMiddle) printf("shipIdleCloseToMiddle\n");
-        printf("false\n");
+
+        if(wasIdle) {
+            dirAtRadius = snapshotIdleDir * 20.0f;
+            firstMaxX = true;   
+            firstMaxY = true;
+
+            // maybe add back the cosine but for the when its comming from front size so that it looks quicker than the circle path
+            printf("wasIdle\n");
+            wasIdle = false; 
+        }
     }
+
+    // want to accelerate when coming from an opposite dir, for the offset of that dir
+
+    // only do this when user starts with wasd that aligns with og snapshot
+        // snapshot
+        // check snapshot and dirDrag
+        // when same alignment allow for + speed
 
     shipTranslate.x -= advanceX; // we want to remove from view
     shipTranslate.y -= advanceY;
 
-    // this literally just freeze oscilation and then it undo dir when it drags toward origin
-
-    // the more complicated thing I had in mind was make oscillation vanish as you go toward origin, then create dir from ship to origin, then go in that direction until intersect radius
-    // I think an issue it had is that oscillation wouldn't vanish, so it would undo dir to go toward origin, but then it would suddenly change the result when oscillation would be updated to intersect
-    // beside the fact that atan2f returns -pi to pi while cos takes in 0 to 2pi
-
-    //printf("advanceY: %f\n", advanceY);
-    //printf("translateSpeed: %f\n", translateSpeed);
-
     glm::mat4 view = glm::translate(glm::mat4(1), glm::vec3(shipTranslate.x, shipTranslate.y, 0.0));
     projView = projection * view;
-    float dx = directionalDrag.x;
-    float dy = directionalDrag.y; // both neg
-    shipModel = glm::translate(glm::mat4(1.0), glm::vec3(-shipTranslate.x + dx, -shipTranslate.y + dy, 0.0));
+    shipModel = glm::translate(glm::mat4(1.0), glm::vec3(-shipTranslate.x - directionalDrag.x, -shipTranslate.y - directionalDrag.y, 0.0));
     
     shipMenu.render();
 }

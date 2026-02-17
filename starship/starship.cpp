@@ -153,7 +153,7 @@ void Starship::draw() {
                                                                           // if measurment above speedDuration calculate where user is at speedDuration, then remove that from total, then calculate + remainder at constant speed
 
     // directional drag needs to accumulate in direction that user goes in, until some threshold
-    float dragRange = 0.039;
+    float dragRange = 0.042;
     float dragIncrement = 0.0012; // should actually be linked to delta time.......
     float dragIncrementToMiddle = 0.0005;
 
@@ -163,6 +163,7 @@ void Starship::draw() {
     float circleRadius = 0.0057;
     float speedupDist = dragRange + circleRadius*1.4;
     f++;
+    tick++;
 
     // either this or allow first movement to span larger(until it reach max, then it needs to reach smaller max again once it exits it)
     static glm::vec2 directionalDrag{0,0};    
@@ -178,31 +179,21 @@ void Starship::draw() {
 
     static bool reachedEndYetX = false;
     static bool reachedEndYetY = false;
-
-    float dirDiffCircle = 1.0;
     static bool startedWithAlignedWasd = false;
-    static glm::vec2 snapshotIdleDir{0};
 
     static glm::vec2 lastPosSnapshot{0};
     static float totalDistTraveled = 0;
+
     // this effect needs to dissapear once the user moved from some amount
     // each loop do diff between last snapshot and when it reach some amount stop 
-
-
     static bool wasIdle = false;
     glm::vec2 distDiff = directionalDrag - lastPosSnapshot;
     totalDistTraveled += sqrt(distDiff.x*distDiff.x + distDiff.y*distDiff.y);
+
+    float dirDiffCircle = 1.0;
     if(startedWithAlignedWasd && !wasIdle && totalDistTraveled < speedupDist) {
-        printf("1glm::dot(glm::normalize(snapshotIdleDir),  glm::normalize(directionalDrag)): %f\n", glm::dot(glm::normalize(snapshotIdleDir),  glm::normalize(directionalDrag)));
-        dirDiffCircle = 1.5; // 2x quicker
+        dirDiffCircle = 1.5; // 1.5x quicker
     }
-
-    static bool firstprint = true;
-    if((f%120==0 && (firstMaxX || firstMaxY)) || firstprint) {
-        firstprint = false;
-        //printf("glm::normalize(snapshotIdleDir) x=%f, y=%f &&&&&& glm::normalize(directionalDrag) x=%f, y=%f &&&&&& glm::dot: %f\n", glm::normalize(snapshotIdleDir).x, glm::normalize(snapshotIdleDir).y,  glm::normalize(directionalDrag).x, glm::normalize(directionalDrag).y, glm::dot(glm::normalize(snapshotIdleDir),  glm::normalize(directionalDrag)));
-    }
-
     
     lastPosSnapshot = directionalDrag;
 
@@ -240,21 +231,13 @@ void Starship::draw() {
 
     if(notPressingX && !shipIdleCloseToMiddle) directionalDrag.x -= dragIncrementToMiddle * dirDrag.x; // will reach 0
     if(notPressingY && !shipIdleCloseToMiddle) directionalDrag.y -= dragIncrementToMiddle * dirDrag.y; 
-    tick++;
 
     static double st = 0;
-
     static glm::vec2 workingDir{0};
-    static bool justSetupLast50ms = false;
-    // I think directionalDrag has time to change by yhe time statement is true
-    // when ship closeToMiddle but not beenTrueAtLeast50ms take snapshot, then false
-
-    // remeber last orientation before pressing any key, as soon as press key overwrite until new press
-    
-    bool justPressed = false;
     static bool wasPressingX = false;
     static bool wasPressingY = false;
 
+    bool justPressed = false;
     if(normalizedDirection.x && !wasPressingX) { justPressed = true; wasPressingX = true; }
     if(normalizedDirection.y && !wasPressingY) { justPressed = true; wasPressingY = true; }
 
@@ -271,57 +254,39 @@ void Starship::draw() {
     } 
 
     if(beenTrueAtLeastMs(st, shipIdleCloseToMiddle, 50)) {
-        justSetupLast50ms = false;
-
         directionalDrag.x = cos(diff + (delta * 2.0 * 3.14159)) * circleRadius*0.9999998;
         directionalDrag.y = sin(diff + (delta * 2.0 * 3.14159)) * circleRadius*0.9999998;
-
-        snapshotIdleDir = directionalDrag; // by the time ship is registered as far enough, this already changed. need to 
 
         if(!wasIdle) { // just done moving
             firstMaxX = 0;
             firstMaxY = 0;
-            wasIdle = true;
             startedWithAlignedWasd = false; 
             totalDistTraveled = 0.0;
             lastPosSnapshot = {0,0};
             printf("just done moving\n\n\n");
-            firstprint = false;
+            wasIdle = true;
         }
     } else {
         diff = -(delta * 2.0 * 3.14159) + atan2f(directionalDrag.y, directionalDrag.x);
 
-        justSetupLast50ms = false;
         if(wasIdle) {
-
             dirAtRadius = workingDir * 4.0f;
             firstMaxX = true;   
             firstMaxY = true;
-            totalDistTraveled = 0.0;
             
             // I want to check when snapshot(toward back) and dir(with back drag) 
-            if(glm::dot(glm::normalize(workingDir), glm::normalize(normalizedDirection)) < -0.2f) { startedWithAlignedWasd = false; printf("startedWithAlignedWasd = true\n");}
+            if(glm::dot(glm::normalize(workingDir), normalizedDirection) < -0.3f) { startedWithAlignedWasd = false; printf("startedWithAlignedWasd = true\n");}
             else { startedWithAlignedWasd = true; printf("startedWithAlignedWasd = false\n"); }
             printf("dot: %f\n", glm::dot(glm::normalize(workingDir), glm::normalize(-normalizedDirection)));
             printf("glm::normalize(workingDir) x=%f, y=%f &&&&& glm::normalize(normalizedDirection) x=%f, %f\n", glm::normalize(workingDir).x, glm::normalize(workingDir).y, glm::normalize(-normalizedDirection).x ,glm::normalize(-normalizedDirection).y);
 
-            firstprint = true;
             // maybe add back the cosine but for the when its comming from front size so that it looks quicker than the circle path
             printf("wasIdle\n");
             wasIdle = false; 
-
         }
-
-        // I mean it does help, but I think when it starts from the side it also looks slower, so maybe allow some part of the other circle side to also add up speed
     }
 
-    // want to accelerate when coming from an opposite dir, for the offset of that dir
-
-    // only do this when user starts with wasd that aligns with og snapshot
-        // snapshot
-        // check snapshot and dirDrag
-        // when same alignment allow for + speed
-
+    // new idea: freeze middle offset, but when reach newEnd can remove it from expanded window, then when come back go back at angle. also add up velocity that it already add to circle dir on top of final velocity 
     shipTranslate.x -= advanceX; // we want to remove from view
     shipTranslate.y -= advanceY;
 

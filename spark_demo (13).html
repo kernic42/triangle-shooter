@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Bullet Spark Demo (ES 3.0)</title>
+<style>
+  * { margin: 0; padding: 0; }
+  body { background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #controls { position: fixed; top: 20px; left: 20px; z-index: 10; color: #fff; font: 14px monospace; display: flex; flex-direction: column; gap: 10px; }
+  #controls > div { display: flex; align-items: center; gap: 10px; }
+  #controls input[type=range] { width: 180px; }
+  #btn { padding: 10px 18px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; font: 14px monospace; border-radius: 4px; }
+  #btn:hover { background: rgba(255,255,255,0.2); }
+  #nextBtn { padding: 10px 18px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; font: 14px monospace; border-radius: 4px; display: none; }
+  #nextBtn:hover { background: rgba(255,255,255,0.2); }
+  .ctrlBtn { padding: 10px 18px; background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.3); cursor: pointer; font: 14px monospace; border-radius: 4px; }
+  .ctrlBtn:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body>
+<div id="controls">
+  <div>
+    <button id="btn">Mode: Circle</button>
+    <button id="nextBtn">Next Particle</button>
+    <button id="colorBtn" class="ctrlBtn">Color: Fire</button>
+  </div>
+  <div><label>Size:</label><input type="range" id="sizeSlider" min="0.1" max="3" step="0.05" value="1"><span id="sizeVal">1.0x</span></div>
+  <div><label>Speed:</label><input type="range" id="speedSlider" min="0.05" max="2" step="0.05" value="0.5"><span id="speedVal">0.5</span></div>
+  <div><label>Rate:</label><input type="range" id="rateSlider" min="1" max="200" step="1" value="80"><span id="rateVal">80/s</span></div>
+  <div><label>Jet curve:</label><input type="range" id="curveSlider" min="1" max="30" step="0.5" value="8"><span id="curveVal">8</span></div>
+  <div><label>Explode at:</label><input type="range" id="explodeSlider" min="0.2" max="2.0" step="0.05" value="0.8"><span id="explodeVal">0.8</span></div>
+  <div><label>Boom size:</label><input type="range" id="boomSlider" min="1" max="30" step="0.5" value="12"><span id="boomVal">12</span></div>
+  <div><label>Boom zone:</label><input type="range" id="zoneSlider" min="0" max="0.8" step="0.02" value="0.2"><span id="zoneVal">0.2</span></div>
+</div>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2');
+if (!gl) { alert('WebGL 2 not supported'); }
+
+// ===== STATE =====
+const modes = ['Circle', 'Close-up'];
+let mode = 0;
+let closeSeed = Math.random();
+let bulletSize = 1.0;
+let aimAngle = 0.3;
+let aimTarget = 0.3;
+let aimSmoothing = 8;
+let bulletSpeed = 0.5;
+const colorNames = ['Fire', 'Ice', 'Radioactive'];
+let bulletColor = 0;
+
+const nextBtn = document.getElementById('nextBtn');
+const modeBtn = document.getElementById('btn');
+const colorBtn = document.getElementById('colorBtn');
+
+modeBtn.onclick = function() {
+  mode = (mode + 1) % 2;
+  this.textContent = 'Mode: ' + modes[mode];
+  nextBtn.style.display = mode === 1 ? 'inline-block' : 'none';
+  if (mode === 1) { closeSeed = Math.random(); updateCloseupData(); }
+};
+
+colorBtn.onclick = function() {
+  bulletColor = (bulletColor + 1) % 3;
+  this.textContent = 'Color: ' + colorNames[bulletColor];
+};
+
+document.getElementById('sizeSlider').oninput = function() {
+  bulletSize = parseFloat(this.value);
+  document.getElementById('sizeVal').textContent = bulletSize.toFixed(1) + 'x';
+};
+
+document.getElementById('speedSlider').oninput = function() {
+  bulletSpeed = parseFloat(this.value);
+  document.getElementById('speedVal').textContent = bulletSpeed.toFixed(2);
+};
+
+// Track cursor -> aim angle from emitter toward cursor
+const EMITTER = { x: -0.7, y: 0.0 };
+canvas.addEventListener('mousemove', function(e) {
+  const mx = (e.clientX / canvas.width) * 2.0 - 1.0;
+  const my = -((e.clientY / canvas.height) * 2.0 - 1.0);
+  const aspect = canvas.width / canvas.height;
+  const dx = mx * aspect - EMITTER.x;
+  const dy = my - EMITTER.y;
+  aimTarget = Math.atan2(dy, dx);
+});
+
+canvas.addEventListener('touchmove', function(e) {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const mx = (touch.clientX / canvas.width) * 2.0 - 1.0;
+  const my = -((touch.clientY / canvas.height) * 2.0 - 1.0);
+  const aspect = canvas.width / canvas.height;
+  const dx = mx * aspect - EMITTER.x;
+  const dy = my - EMITTER.y;
+  aimTarget = Math.atan2(dy, dx);
+}, { passive: false });
+
+let spawnRate = 80;
+document.getElementById('rateSlider').oninput = function() {
+  spawnRate = parseFloat(this.value);
+  document.getElementById('rateVal').textContent = Math.round(spawnRate) + '/s';
+};
+
+document.getElementById('curveSlider').oninput = function() {
+  aimSmoothing = parseFloat(this.value);
+  document.getElementById('curveVal').textContent = aimSmoothing.toFixed(1);
+};
+
+let explodeDistance = 0.8;
+document.getElementById('explodeSlider').oninput = function() {
+  explodeDistance = parseFloat(this.value);
+  document.getElementById('explodeVal').textContent = explodeDistance.toFixed(2);
+};
+
+let boomSize = 12;
+document.getElementById('boomSlider').oninput = function() {
+  boomSize = parseFloat(this.value);
+  document.getElementById('boomVal').textContent = boomSize.toFixed(1);
+};
+
+let boomZone = 0.2;
+document.getElementById('zoneSlider').oninput = function() {
+  boomZone = parseFloat(this.value);
+  document.getElementById('zoneVal').textContent = boomZone.toFixed(2);
+};
+
+nextBtn.onclick = function() {
+  closeSeed = Math.random();
+  updateCloseupData();
+};
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ===== VERTEX SHADER =====
+const vs = `#version 300 es
+precision mediump float;
+
+layout(location = 0) in vec2 aQuad;
+layout(location = 1) in vec2 iCenter;
+layout(location = 2) in vec2 iVelocity;
+layout(location = 3) in float iSeed;
+layout(location = 4) in float iType;
+layout(location = 5) in float iSpawnTime;
+
+uniform float uTime;
+uniform float uAspect;
+uniform float uSize;
+uniform float uLifespan;
+uniform float uExplodeDist;
+uniform float uBoomSize;
+uniform float uBoomZone;
+
+out vec2 vUV;
+out float vSeed;
+out float vLife;
+out float vType;
+out float vExplode;
+
+void main() {
+    vUV = aQuad * 0.5 + 0.5;
+    vSeed = iSeed;
+    vType = iType;
+    vExplode = 0.0;
+
+    float age = uTime - iSpawnTime;
+    if (age < 0.0 || age > uLifespan) {
+        gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+        vLife = 0.0;
+        return;
+    }
+
+    float lifeFrac = age / uLifespan;
+    float peak = 0.3 + fract(iSeed * 7.13) * 0.3;
+    float rampUp = smoothstep(0.0, peak, lifeFrac);
+    float rampDown = 1.0 - smoothstep(peak, 1.0, lifeFrac);
+    vLife = max(mix(0.85, 1.0, rampUp) * rampDown, 0.85);
+
+    vec2 center = iCenter + iVelocity * age;
+    vec2 vel = iVelocity;
+
+    float speed = length(vel);
+    vec2 dir = speed > 0.001 ? vel / speed : vec2(1.0, 0.0);
+    vec2 perp = vec2(-dir.y, dir.x);
+
+    // Per-bullet random explode distance within zone before threshold
+    float myExplodeDist = max(uExplodeDist - fract(iSeed * 31.71) * uBoomZone, 0.01);
+
+    float dist = speed * age;
+    float explodeDur = 0.2;
+    float s = 0.012 * uSize;
+
+    if (uExplodeDist > 0.0 && dist > myExplodeDist) {
+        float timeToThreshold = myExplodeDist / max(speed, 0.001);
+        float explodeAge = age - timeToThreshold;
+        float phase = clamp(explodeAge / explodeDur, 0.0, 1.0);
+        vExplode = phase;
+
+        center = iCenter + iVelocity * timeToThreshold;
+        s *= 1.0 + phase * uBoomSize;
+        vLife = 1.0 - phase * phase;
+
+        if (phase >= 1.0) {
+            gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+            vLife = 0.0;
+            return;
+        }
+    }
+
+    vec2 world = center + dir * aQuad.x * s + perp * aQuad.y * s;
+    world.x /= uAspect;
+
+    gl_Position = vec4(world, 0.0, 1.0);
+}
+`;
+
+// ===== FRAGMENT SHADER =====
+const fs = `#version 300 es
+precision mediump float;
+
+in vec2 vUV;
+in float vSeed;
+in float vLife;
+in float vType;
+in float vExplode;
+
+uniform float uTime;
+
+out vec4 fragColor;
+
+void main() {
+    float u = vUV.x;
+    float v = vUV.y;
+
+    vec2 ctr = vec2(0.5);
+    float dist = length(vec2(u, v) - ctr) * 2.0;
+    float circle = 1.0 - smoothstep(0.6, 1.0, dist);
+    float shape = circle * vLife;
+    if (shape < 0.002) discard;
+
+    // Explosion: jagged starburst
+    if (vExplode > 0.0) {
+        float flash = (1.0 - vExplode);
+        
+        // Zig-zag starburst edge
+        float angle = atan(vUV.y - 0.5, vUV.x - 0.5);
+        float spikes = 8.0 + floor(fract(vSeed * 17.3) * 5.0); // 8-12 spikes per bullet
+        float zigzag = abs(fract(angle * spikes / 6.2832 + vSeed * 3.0) - 0.5) * 2.0; // 0..1 sawtooth
+        zigzag = mix(0.35, 0.5, zigzag); // inner/outer radius of spikes
+        
+        // Second layer of smaller jags
+        float jag2 = abs(fract(angle * spikes * 2.3 / 6.2832 + vSeed * 7.0) - 0.5) * 2.0;
+        zigzag += (jag2 - 0.5) * 0.08;
+        
+        float starShape = 1.0 - smoothstep(zigzag - 0.03, zigzag + 0.03, dist * 0.5);
+        
+        // Hot white core
+        float core = 1.0 - smoothstep(0.0, 0.2, dist);
+        
+        vec3 col = mix(vec3(1.0, 0.85, 0.3), vec3(1.0, 1.0, 0.9), core);
+        float alpha = starShape * flash * flash;
+        if (alpha < 0.002) discard;
+        fragColor = vec4(col * alpha * 3.0, alpha);
+        return;
+    }
+
+    float hotAngle = vSeed * 6.2832;
+    vec2 hotDir = vec2(cos(hotAngle), sin(hotAngle));
+    vec2 uv = vec2(u, v) - ctr;
+    float side = dot(uv, hotDir) * 2.0;
+    float gradient = side * 0.5 + 0.5;
+    float hotspot = pow(gradient, 1.0 + vLife * 4.0);
+
+    float rimFactor = smoothstep(0.15, 0.75, dist);
+    float brightness = mix(0.55, 1.0, rimFactor * 0.6 + 0.4) * vLife;
+
+    vec3 baseCol;
+    vec3 hotCol;
+    if (vType < 0.5) {
+        baseCol = vec3(1.0, 0.4, 0.03);
+        hotCol = vec3(1.0, 0.7, 0.15);
+    } else if (vType < 1.5) {
+        baseCol = vec3(0.1, 0.5, 1.0);
+        hotCol = vec3(0.6, 0.85, 1.0);
+    } else {
+        baseCol = vec3(0.08, 0.7, 0.05);
+        hotCol = vec3(0.3, 1.0, 0.15);
+    }
+
+    vec3 col = baseCol;
+    col = mix(col, hotCol, hotspot * 0.5);
+
+    float b = sin(uTime * 3.5 + vSeed * 41.3) * 0.5
+            + sin(uTime * 5.7 + vSeed * 23.7) * 0.3
+            + sin(uTime * 9.3 + vSeed * 67.1) * 0.2;
+    float breathe = b * 0.5 + 0.5;
+    breathe = breathe * breathe;
+
+    // Breathing target per type
+    vec3 breatheCol;
+    if (vType < 0.5) {
+        breatheCol = vec3(0.6, 0.4, 0.2);  // warm white
+    } else if (vType < 1.5) {
+        breatheCol = vec3(0.4, 0.5, 0.7);  // bright cyan-white
+    } else {
+        breatheCol = vec3(0.6, 0.9, 0.3);  // bright yellow-green
+    }
+
+    float intensity = (1.5 + hotspot * 2.0) * brightness;
+    col *= intensity;
+    col = mix(col, col * 1.8 + breatheCol, breathe * 0.5);
+
+    fragColor = vec4(col * shape, shape);
+}
+`;
+
+// ===== COMPILE =====
+function compile(src, type) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    console.error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(vs, gl.VERTEX_SHADER));
+gl.attachShader(prog, compile(fs, gl.FRAGMENT_SHADER));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+  console.error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const uTime = gl.getUniformLocation(prog, 'uTime');
+const uAspect = gl.getUniformLocation(prog, 'uAspect');
+const uSize = gl.getUniformLocation(prog, 'uSize');
+const uLifespan = gl.getUniformLocation(prog, 'uLifespan');
+const uExplodeDist = gl.getUniformLocation(prog, 'uExplodeDist');
+const uBoomSize = gl.getUniformLocation(prog, 'uBoomSize');
+const uBoomZone = gl.getUniformLocation(prog, 'uBoomZone');
+
+// ===== SHARED QUAD =====
+const quadVerts = new Float32Array([-1,-1, 1,-1, 1,1, -1,1]);
+const quadIndices = new Uint16Array([0,1,2, 0,2,3]);
+
+const quadVBO = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
+
+const ebo = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, quadIndices, gl.STATIC_DRAW);
+
+// ===== RING BUFFER OF BULLETS =====
+const MAX_BULLETS = 500;
+const LIFESPAN = 3.0;
+const BF = 7; // center.xy, vel.xy, seed, type, spawnTime
+const bulletData = new Float32Array(MAX_BULLETS * BF);
+let bulletHead = 0; // next slot to write
+let nextSpawnTime = 0;
+
+// Init all spawn times to -999 so they're offscreen
+for (let i = 0; i < MAX_BULLETS; i++) {
+  bulletData[i * BF + 6] = -999.0;
+}
+
+function spawnBullet(time) {
+  const idx = bulletHead * BF;
+  const angle = aimAngle;
+  bulletData[idx + 0] = EMITTER.x;
+  bulletData[idx + 1] = EMITTER.y;
+  bulletData[idx + 2] = Math.cos(angle) * bulletSpeed;
+  bulletData[idx + 3] = Math.sin(angle) * bulletSpeed;
+  bulletData[idx + 4] = Math.random();
+  bulletData[idx + 5] = bulletColor;
+  bulletData[idx + 6] = time;
+  bulletHead = (bulletHead + 1) % MAX_BULLETS;
+}
+
+const bulletVBO = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, bulletVBO);
+gl.bufferData(gl.ARRAY_BUFFER, bulletData, gl.DYNAMIC_DRAW);
+
+// Close-up: single bullet
+const closeupData = new Float32Array(BF);
+const closeupVBO = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, closeupVBO);
+gl.bufferData(gl.ARRAY_BUFFER, closeupData, gl.DYNAMIC_DRAW);
+
+function updateCloseupData() {
+  closeupData[0] = 0; closeupData[1] = 0;
+  closeupData[2] = 0; closeupData[3] = 0;
+  closeupData[4] = closeSeed;
+  closeupData[5] = bulletColor;
+  closeupData[6] = 0; // spawnTime 0 = always alive with uLifespan large
+  gl.bindBuffer(gl.ARRAY_BUFFER, closeupVBO);
+  gl.bufferData(gl.ARRAY_BUFFER, closeupData, gl.DYNAMIC_DRAW);
+}
+updateCloseupData();
+
+// ===== VAOs =====
+const stride = BF * 4;
+
+function setupInstanceAttribs(buf) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  // loc 1: iCenter (vec2)
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, false, stride, 0);
+  gl.vertexAttribDivisor(1, 1);
+  // loc 2: iVelocity (vec2)
+  gl.enableVertexAttribArray(2);
+  gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, 8);
+  gl.vertexAttribDivisor(2, 1);
+  // loc 3: iSeed (float)
+  gl.enableVertexAttribArray(3);
+  gl.vertexAttribPointer(3, 1, gl.FLOAT, false, stride, 16);
+  gl.vertexAttribDivisor(3, 1);
+  // loc 4: iType (float)
+  gl.enableVertexAttribArray(4);
+  gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 20);
+  gl.vertexAttribDivisor(4, 1);
+  // loc 5: iSpawnTime (float)
+  gl.enableVertexAttribArray(5);
+  gl.vertexAttribPointer(5, 1, gl.FLOAT, false, stride, 24);
+  gl.vertexAttribDivisor(5, 1);
+}
+
+const circleVAO = gl.createVertexArray();
+gl.bindVertexArray(circleVAO);
+gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(0, 0);
+setupInstanceAttribs(bulletVBO);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+gl.bindVertexArray(null);
+
+const closeVAO = gl.createVertexArray();
+gl.bindVertexArray(closeVAO);
+gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(0, 0);
+setupInstanceAttribs(closeupVBO);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+gl.bindVertexArray(null);
+
+// ===== RENDER =====
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+gl.disable(gl.DEPTH_TEST);
+
+let lastTime = 0;
+
+function frame(t) {
+  t *= 0.001;
+  const dt = Math.min(t - lastTime, 0.05);
+  lastTime = t;
+
+  // Smooth aim toward target (handle angle wrapping)
+  let diff = aimTarget - aimAngle;
+  if (diff > Math.PI) diff -= 2 * Math.PI;
+  if (diff < -Math.PI) diff += 2 * Math.PI;
+  aimAngle += diff * Math.min(aimSmoothing * dt, 1.0);
+
+  // Spawn bullets
+  if (mode === 0) {
+    const interval = 1.0 / spawnRate;
+    if (nextSpawnTime < t - LIFESPAN) nextSpawnTime = t; // catch up if paused/tab hidden
+    while (nextSpawnTime <= t) {
+      spawnBullet(nextSpawnTime);
+      nextSpawnTime += interval;
+    }
+    // Upload
+    gl.bindBuffer(gl.ARRAY_BUFFER, bulletVBO);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, bulletData);
+  }
+
+  gl.clearColor(0.008, 0.006, 0.015, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  gl.uniform1f(uTime, t);
+  gl.uniform1f(uAspect, canvas.width / canvas.height);
+
+  if (mode === 0) {
+    gl.uniform1f(uSize, bulletSize);
+    gl.uniform1f(uLifespan, LIFESPAN);
+    gl.uniform1f(uExplodeDist, explodeDistance);
+    gl.uniform1f(uBoomSize, boomSize);
+    gl.uniform1f(uBoomZone, boomZone);
+    gl.bindVertexArray(circleVAO);
+    gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, MAX_BULLETS);
+    gl.bindVertexArray(null);
+  } else {
+    gl.uniform1f(uSize, bulletSize * 30.0);
+    gl.uniform1f(uLifespan, 99999.0);
+    gl.uniform1f(uExplodeDist, 0.0);
+    gl.uniform1f(uBoomSize, 0.0);
+    gl.uniform1f(uBoomZone, 0.0); // never dies
+    gl.bindVertexArray(closeVAO);
+    gl.drawElementsInstanced(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0, 1);
+    gl.bindVertexArray(null);
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

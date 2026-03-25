@@ -131,9 +131,6 @@ void ShipRenderer::initCellRendering() {
     glDeleteShader(frag);
     
     // Get uniform locations
-    hullTransformLoc = glGetUniformLocation(hullShader, "uTransforms");
-    hullTexCoordsLoc = glGetUniformLocation(hullShader, "uTexCoords");
-    hullColorsLoc = glGetUniformLocation(hullShader, "uColors");
     hullProjectionLoc = glGetUniformLocation(hullShader, "uProjection");
     hullShipRotationLoc = glGetUniformLocation(hullShader, "uShipRotation");
     hullLocalRotationLoc = glGetUniformLocation(hullShader, "uLocalRotation");
@@ -149,16 +146,22 @@ void ShipRenderer::initCellRendering() {
          half, -half,
          half,  half
     };
+    //////////////////////////////////////////////////////
+    //                set hull vao and vbo              //
+    //////////////////////////////////////////////////////
     
+    // gen hull
     glGenVertexArrays(1, &hullVAO);
     glGenBuffers(1, &hullVBO);
-    
     glBindVertexArray(hullVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, hullVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
-    
+
+    // set aPos
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+
+    // upload aPos once
+    glBindBuffer(GL_ARRAY_BUFFER, hullVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
 
     //////////////////////////////////////////////////////
     //           set hullSettings vao and vbo           //
@@ -198,7 +201,11 @@ void ShipRenderer::initCellRendering() {
     glVertexAttribDivisor(7, 1);
     glVertexAttribDivisor(8, 1);
 
-    
+   // layout(location = 0) in vec2 aPos;
+   // layout(location = 1) in vec4 aColor;
+   // layout(location = 2) in mat3x2 aTexCoord;
+   // layout(location = 4) in mat4 aTransform;
+
     glBindVertexArray(0);
     
     // Load atlas texture
@@ -267,7 +274,7 @@ void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
         for(int j = 0; j < ship.cellHullData.count; ++j) { // maybe put the count as a global to share between hull and cannons instead in the struct
             hullSettings_t hull;
             hull.aTexCoord = ship.cellHullData.texCoords[j];
-            hull.aTransform = ship.cellHullData.model[j];
+            hull.aTransform = glm::mat4(1.0f); // identity
             hull.aColor = ship.cellHullData.colors[j];
             hullSettings.push_back(hull);
 
@@ -392,7 +399,7 @@ void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
             stride.position = cannonData.pos[j];
             stride.color = (float)cannonData.colors[j];
 
-            strides.push_back(stride);
+            strides.push_back(stride); // prob really slow with push back
         }
     }
 

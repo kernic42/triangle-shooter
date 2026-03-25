@@ -25,8 +25,8 @@ class ShipRenderer {
     GLuint gridVertexCount;
 
     // cell hull OpenGL stuff
-    GLuint hullShader, hullSettingsVBO, hullVAO, hullVBO, hullAtlasTexture, hullCrackAtlasTexture;
-    GLuint hullTransformLoc, hullTexCoordsLoc, hullColorsLoc, hullProjectionLoc, hullShipRotationLoc, hullLocalRotationLoc, hullAtlasLoc, hullAtlasCrackLoc, hullBorderWidthLoc, hullTimeLoc;
+    GLuint hullShader, hullVAO, hullVBO, hullSettingsVBO, hullAtlasTexture, hullCrackAtlasTexture;
+    GLuint hullProjectionLoc, hullShipRotationLoc, hullLocalRotationLoc, hullAtlasLoc, hullAtlasCrackLoc, hullBorderWidthLoc, hullTimeLoc;
 
     typedef struct {
         glm::vec4 aColor;

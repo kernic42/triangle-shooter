@@ -124,10 +124,9 @@ enum AtlasSprite {
 inline const char* gridVertexShader = R"(#version 300 es
 layout(location = 0) in vec2 aPos;
 uniform mat4 uProjection;
-uniform mat3 uRotation;
+
 void main() {
-    vec3 rotated = uRotation * vec3(aPos, 1.0);
-    gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
+    gl_Position = uProjection * vec4(aPos.xy, 0.0, 1.0);
 }
 )";
 
@@ -179,15 +178,12 @@ layout(location = 2) in mat3x2 aTexCoord;
 layout(location = 5) in mat4 aTransform;
 
 uniform mat4 uProjection;
-uniform mat4 uLocalRotation;
-uniform mat3 uShipRotation;
 
 out vec2 vTexCoord;
 out vec2 vLocalUV;
 out vec4 vColor;
 
 void main() {
-    mat4 model = aTransform;
     vTexCoord = aTexCoord[gl_VertexID];
     vColor = aColor;
     
@@ -196,9 +192,7 @@ void main() {
     else if(gl_VertexID == 1) vLocalUV = vec2(1.0, 0.0);
     else vLocalUV = vec2(1.0, 1.0);
     
-    vec4 localPos = model * uLocalRotation * vec4(aPos, 0.0, 1.0);
-    vec3 rotated = uShipRotation * vec3(localPos.xy, 1.0);
-    gl_Position = uProjection * vec4(rotated.xy, 0.0, 1.0);
+    gl_Position = uProjection * aTransform * vec4(aPos, 0.0, 1.0);
 }
 )";
 

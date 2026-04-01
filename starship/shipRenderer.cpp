@@ -42,7 +42,6 @@ void ShipRenderer::initGrid() {
     glDeleteShader(vert);
     glDeleteShader(frag);
 
-    gridRotationLoc = glGetUniformLocation(gridShader, "uRotation");
     gridProjectionLoc = glGetUniformLocation(gridShader, "uProjection");
 
     // Build line vertices
@@ -82,9 +81,9 @@ void ShipRenderer::initGrid() {
 
     // Create VAO/VBO
     glGenVertexArrays(1, &gridVAO);
-    glGenBuffers(1, &gridVBO);
-
     glBindVertexArray(gridVAO);
+
+    glGenBuffers(1, &gridVBO);
     glBindBuffer(GL_ARRAY_BUFFER, gridVBO);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
@@ -95,19 +94,11 @@ void ShipRenderer::initGrid() {
 }
 
 void ShipRenderer::drawGrid(float rotation) {
+    glm::mat4 shipRotation = glm::rotate(glm::mat4(1.0f), rotation, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 transform = projView * shipModel * shipRotation;
+
     glUseProgram(gridShader);
 
-    float c = cosf(rotation);
-    float s = sinf(rotation);
-    float rotationMatrix[9] = {
-        c,  s,  0.0f,
-       -s,  c,  0.0f,
-        0.0f, 0.0f, 1.0f
-    };
-
-    glUniformMatrix3fv(gridRotationLoc, 1, GL_FALSE, rotationMatrix);
-
-    glm::mat4 transform = projView * shipModel;
     glUniformMatrix4fv(gridProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
 
     glBindVertexArray(gridVAO);
@@ -131,17 +122,12 @@ void ShipRenderer::initCellRendering() {
     glDeleteShader(frag);
     
     // Get uniform locations
-    hullTransformLoc = glGetUniformLocation(hullShader, "uTransforms");
-    hullTexCoordsLoc = glGetUniformLocation(hullShader, "uTexCoords");
-    hullColorsLoc = glGetUniformLocation(hullShader, "uColors");
     hullProjectionLoc = glGetUniformLocation(hullShader, "uProjection");
-    hullShipRotationLoc = glGetUniformLocation(hullShader, "uShipRotation");
-    hullLocalRotationLoc = glGetUniformLocation(hullShader, "uLocalRotation");
     hullAtlasLoc = glGetUniformLocation(hullShader, "uAtlas");
     hullAtlasCrackLoc = glGetUniformLocation(hullShader, "uCrackTex");
     hullBorderWidthLoc = glGetUniformLocation(hullShader, "uBorderWidth");
     hullTimeLoc = glGetUniformLocation(hullShader, "uTime");
-    
+
     // Create triangle VAO/VBO
     float half = cellSize / 2.0f;
     float triangleVerts[] = {
@@ -151,53 +137,48 @@ void ShipRenderer::initCellRendering() {
     };
     
     glGenVertexArrays(1, &hullVAO);
-    glGenBuffers(1, &hullVBO);
-    
     glBindVertexArray(hullVAO);
+
+    glGenBuffers(1, &hullVBO);
     glBindBuffer(GL_ARRAY_BUFFER, hullVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(triangleVerts), triangleVerts, GL_STATIC_DRAW);
     
+    // set vertices
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
-    //////////////////////////////////////////////////////
-    //           set hullSettings vao and vbo           //
-    //////////////////////////////////////////////////////
-
-    // gen hullSettings
+    //////////////////////////////////////
+    //          set hullSettings        //
+    //////////////////////////////////////
     glGenBuffers(1, &hullSettingsVBO);
     glBindBuffer(GL_ARRAY_BUFFER, hullSettingsVBO);
 
-    // set aColor
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)offsetof(hullSettings_t, aColor));
     glVertexAttribDivisor(1, 1);
     glEnableVertexAttribArray(1);
 
-    // set aTexCoord
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)offsetof(hullSettings_t, aTexCoord));
     glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)(offsetof(hullSettings_t, aTexCoord) + sizeof(float) * 2));
     glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)(offsetof(hullSettings_t, aTexCoord) + sizeof(float) * 4));
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
-    glEnableVertexAttribArray(4);
     glVertexAttribDivisor(2, 1);
     glVertexAttribDivisor(3, 1);
     glVertexAttribDivisor(4, 1);
- // i think it takes 3 loc not 2 for mat3x2
-    // set aTransform
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
+
     glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)offsetof(hullSettings_t, aTransform));
     glVertexAttribPointer(6, 4, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)(offsetof(hullSettings_t, aTransform) + sizeof(float) * 4));
     glVertexAttribPointer(7, 4, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)(offsetof(hullSettings_t, aTransform) + sizeof(float) * 8));
     glVertexAttribPointer(8, 4, GL_FLOAT, GL_FALSE, sizeof(hullSettings_t), (void*)(offsetof(hullSettings_t, aTransform) + sizeof(float) * 12));
-    glEnableVertexAttribArray(5);
-    glEnableVertexAttribArray(6);
-    glEnableVertexAttribArray(7);
-    glEnableVertexAttribArray(8);   
     glVertexAttribDivisor(5, 1);
     glVertexAttribDivisor(6, 1);
     glVertexAttribDivisor(7, 1);
     glVertexAttribDivisor(8, 1);
-
+    glEnableVertexAttribArray(5);
+    glEnableVertexAttribArray(6);
+    glEnableVertexAttribArray(7);
+    glEnableVertexAttribArray(8);   
     
     glBindVertexArray(0);
     
@@ -210,31 +191,17 @@ void ShipRenderer::initCellRendering() {
 void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
     if (cannonCount == 0) return;
 
+    float borderWidth = 0.012;
+    float currentRotation = shipsRotation[0]; // just use first rotation for now
+    glm::mat4 shipRotation = glm::rotate(glm::mat4(1.0f), currentRotation, glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::mat4 transform = projView * shipModel * shipRotation;
+
     glUseProgram(hullShader);
 
-    float borderWidth = 0.012;
-    glUniform1f(hullBorderWidthLoc, borderWidth);
-    
-    // init with no rot
-    glUniformMatrix4fv(hullLocalRotationLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0)));
-
-    // Projection
-    glm::mat4 transform = projView * shipModel;
     glUniformMatrix4fv(hullProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
-    
-    // Ship rotation
-    float currentRotation = shipsRotation[0]; // just use first rotation for now
-    float c = cosf(currentRotation);          // prob replace with glm::mat4
-    float s = sinf(currentRotation);
-    float rotationMatrix[9] = {
-        c,  s,  0.0f,
-       -s,  c,  0.0f,
-        0.0f, 0.0f, 1.0f
-    };
-    glUniformMatrix3fv(hullShipRotationLoc, 1, GL_FALSE, rotationMatrix);
-
+    glUniform1f(hullBorderWidthLoc, borderWidth);
     glUniform1f(hullTimeLoc, emscripten_get_now() / 1000.0f);
-    
+
     // Bind atlas
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, hullAtlasTexture);
@@ -251,32 +218,24 @@ void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
     glBindVertexArray(0);
 }
 
-
 void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
-    glUseProgram(hullShader);
-    glBindVertexArray(hullVAO);
-    
     // need to iterate through all ships and copy their data into contiguous vector to send to gpu
     std::vector<hullSettings_t> hullSettings;
-    
-    int aliveCount = 0;
 
-    for(size_t i = 0; i < shipCount; ++i) {
+    for(int i = 0; i < shipCount; ++i) {
         shipData_t &ship = ships[i];
 
-        for(int j = 0; j < ship.cellHullData.count; ++j) { // maybe put the count as a global to share between hull and cannons instead in the struct
-            hullSettings_t hull;
-            hull.aTexCoord = ship.cellHullData.texCoords[j];
+        for(int j = 0; j < ship.cellHullData.count; ++j) { 
+            hullSettings_t hull; 
+            hull.aTexCoord = ship.cellHullData.texCoords[j]; // maybe share cellHulLData instead of creating hullSettiings_t if possible
             hull.aTransform = ship.cellHullData.model[j];
             hull.aColor = ship.cellHullData.colors[j];
             hullSettings.push_back(hull);
-
-            aliveCount++;
         }
     }
-    // I think aliveCount and cannonCount is the same duplicate variable.....
-    glBindBuffer(GL_ARRAY_BUFFER, hullSettingsVBO); // I think vao already bound but in case
-    glBufferData(GL_ARRAY_BUFFER, aliveCount * sizeof(hullSettings_t), &hullSettings[0], GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ARRAY_BUFFER, hullSettingsVBO);
+    glBufferData(GL_ARRAY_BUFFER, hullSettings.size() * sizeof(hullSettings_t), &hullSettings[0], GL_STATIC_DRAW);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -313,11 +272,8 @@ void ShipRenderer::initCannons() {
 
     glUseProgram(cannonShader);
 
-    // set cannon grid dimensions once
-    glUniform2fv(cannonGridDimensionsLoc, 1, glm::value_ptr(cannonGridDimensions));
-
-    // Set projection once
-    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projView));
+    glUniform2fv(cannonGridDimensionsLoc, 1, glm::value_ptr(cannonGridDimensions)); // set cannon grid dimensions once
+    glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(projView)); // Set projection once
 
     struct CannonVertex {
         float x, y;
@@ -343,29 +299,32 @@ void ShipRenderer::initCannons() {
     };
 
     glGenVertexArrays(1, &cannonVAO);
-    glGenBuffers(1, &cannonVBO);
-    glGenBuffers(1, &cannonPositionsVBO);
-
     glBindVertexArray(cannonVAO);
 
+    glGenBuffers(1, &cannonVBO);
     glBindBuffer(GL_ARRAY_BUFFER, cannonVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(cannonQuad), cannonQuad, GL_STATIC_DRAW);
 
+    // set cannon vertices
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(CannonVertex), (void*)0);
     glEnableVertexAttribArray(0);
 
+    // set cannons uvs
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(CannonVertex), (void*)(2 * sizeof(float)));
     glEnableVertexAttribArray(1);
 
-    int cannonStrideSize = sizeof(glm::vec2) + sizeof(float); // cannon position x,y + cannon textureID
-
+    ///////////////////////////////
+    //      cannons positions    //
+    ///////////////////////////////
+    glGenBuffers(1, &cannonPositionsVBO);
     glBindBuffer(GL_ARRAY_BUFFER, cannonPositionsVBO);
+
     glVertexAttribDivisor(2, 1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, cannonStrideSize, (void*)0);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(cannonStride), (void*)offsetof(cannonStride, position));
     glEnableVertexAttribArray(2);
 
     glVertexAttribDivisor(3, 1);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, cannonStrideSize, (void*)(sizeof(glm::vec2)));
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(cannonStride), (void*)offsetof(cannonStride, color));
     glEnableVertexAttribArray(3);
 
     glBindVertexArray(0);
@@ -375,14 +334,8 @@ void ShipRenderer::initCannons() {
 
 void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
     // iterate through cannons and put data in contiguous array
-    typedef struct {
-        glm::vec2 position;
-        float color;
-    } cannonStride;
-
     std::vector<cannonStride> strides;
 
-    //if (cells[i].cellAlive) { but done in the ship game logic instead
     for(int i = 0; i < shipCount; ++i) {
         shipData_t ship = ships[i];
         cannonData_t cannonData = ship.cannonData;
@@ -391,15 +344,14 @@ void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
             cannonStride stride;
             stride.position = cannonData.pos[j];
             stride.color = (float)cannonData.colors[j];
-
             strides.push_back(stride);
         }
     }
 
-    cannonCount = strides.size();
+    cannonCount = strides.size(); // global needs to be updated
 
     glBindBuffer(GL_ARRAY_BUFFER, cannonPositionsVBO);
-    glBufferData(GL_ARRAY_BUFFER, cannonCount * sizeof(cannonStride), &strides[0], GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, strides.size() * sizeof(cannonStride), &strides[0], GL_STATIC_DRAW);
 }
 
 void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRotation) {
@@ -420,14 +372,12 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
 
     glm::mat4 transform = projView * shipModel;
     glUniformMatrix4fv(cannonProjectionLoc, 1, GL_FALSE, glm::value_ptr(transform));
+    glUniform1f(cannonAngleLoc, cannonAngle);
+    glUniform1f(cannonShipRotationLoc, shipRot);
 
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, cannonTexture);
     glUniform1i(cannonTextureLoc, 1);
-
-    // Upload angle
-    glUniform1f(cannonAngleLoc, cannonAngle);
-    glUniform1f(cannonShipRotationLoc, shipRot);
 
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, cannonCount);
     glBindVertexArray(0);
@@ -455,36 +405,6 @@ void ShipRenderer::initBullets() {
     glDeleteShader(vs);
     glDeleteShader(fs);
 
-    bulletTexture = loadTexture("bullet.png");
-
-    glGenVertexArrays(1, &bulletVAO);
-    glGenBuffers(1, &bulletVBO);
-    glGenBuffers(1, &bulletAttributesVBO);
-
-    glUseProgram(bulletShader);
-    glBindVertexArray(bulletVAO);
-
-    // get uniform locations
-    bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
-    bulletGridDimensionsLoc = glGetUniformLocation(bulletShader, "uGridDimensions");
-    bulletProjectionLoc = glGetUniformLocation(bulletShader, "uProjection");
-    bulletTextureLoc = glGetUniformLocation(bulletShader, "uTexture");
-
-    // upload uGridDimensions once
-    glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
-
-    // upload projection once
-    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
-
-    // static data
-    int staticStrideSize = 4 * sizeof(float);
-    glBindBuffer(GL_ARRAY_BUFFER, bulletVBO);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, staticStrideSize, (void*)0);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, staticStrideSize, (void*)(2*sizeof(float)));
-    glEnableVertexAttribArray(1);
-
     float s = 0.004f;  // adjust to taste
     float quad[] = {
         // triangle 1
@@ -497,9 +417,37 @@ void ShipRenderer::initBullets() {
         -s,  s,  0.0f, 1.0f
     };
 
+    // get uniform locations
+    bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
+    bulletGridDimensionsLoc = glGetUniformLocation(bulletShader, "uGridDimensions");
+    bulletProjectionLoc = glGetUniformLocation(bulletShader, "uProjection");
+    bulletTextureLoc = glGetUniformLocation(bulletShader, "uTexture");
+
+    glUseProgram(bulletShader);
+
+    // upload once
+    glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
+    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
+
+    glGenVertexArrays(1, &bulletVAO);
+    glBindVertexArray(bulletVAO);
+
+    glGenBuffers(1, &bulletVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, bulletVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
 
-    // dynamic data
+    //////////////////////////////////
+    //     static data(quad, uv)    //
+    //////////////////////////////////
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2*sizeof(float)));
+    glEnableVertexAttribArray(1);
+    /////////////////////////////
+    //      dynamic data       //
+    /////////////////////////////
+    glGenBuffers(1, &bulletAttributesVBO);
     glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
 
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(bulletData_t), (void*)offsetof(bulletData_t, origin));
@@ -531,21 +479,20 @@ void ShipRenderer::initBullets() {
     glEnableVertexAttribArray(8);
 
     glBindVertexArray(0);
+
+    bulletTexture = loadTexture("bullet.png");
 }
 
 void ShipRenderer::renderBullets() {
     glUseProgram(bulletShader);
     glBindVertexArray(bulletVAO);
 
+    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
     glUniform1f(bulletTimeLoc, emscripten_get_now() / 1000.0f);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, bulletTexture);
     glUniform1i(bulletTextureLoc, 0);
-
-    // upload projView
-    glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
-
 
     glDrawArraysInstanced(GL_TRIANGLES, 0, 6, bulletCount);
 

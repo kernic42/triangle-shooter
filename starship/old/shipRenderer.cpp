@@ -260,30 +260,23 @@ void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
 
 
 void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
-    glUseProgram(hullShader);
-    glBindVertexArray(hullVAO);
-    
     // need to iterate through all ships and copy their data into contiguous vector to send to gpu
     std::vector<hullSettings_t> hullSettings;
-    
-    int aliveCount = 0;
 
-    for(size_t i = 0; i < shipCount; ++i) {
+    for(int i = 0; i < shipCount; ++i) {
         shipData_t &ship = ships[i];
 
-        for(int j = 0; j < ship.cellHullData.count; ++j) { // maybe put the count as a global to share between hull and cannons instead in the struct
+        for(int j = 0; j < ship.cellHullData.count; ++j) {
             hullSettings_t hull;
-            hull.aTexCoord = ship.cellHullData.texCoords[j];
+            hull.aTexCoord = ship.cellHullData.texCoords[j]; // maybe reuse struct and assign directly if all same fields?
             hull.aTransform = glm::mat4(1.0f); // identity
             hull.aColor = ship.cellHullData.colors[j];
             hullSettings.push_back(hull);
-
-            aliveCount++;
         }
     }
-    // I think aliveCount and cannonCount is the same duplicate variable.....
-    glBindBuffer(GL_ARRAY_BUFFER, hullSettingsVBO); // I think vao already bound but in case
-    glBufferData(GL_ARRAY_BUFFER, aliveCount * sizeof(hullSettings_t), &hullSettings[0], GL_STATIC_DRAW);
+ 
+    glBindBuffer(GL_ARRAY_BUFFER, hullSettingsVBO);
+    glBufferData(GL_ARRAY_BUFFER, hullSettings.size() * sizeof(hullSettings_t), &hullSettings[0], GL_STATIC_DRAW);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////

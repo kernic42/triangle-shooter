@@ -3,13 +3,13 @@ precision mediump float;
 
 layout(location = 0) in vec2 aPos;            // vert
 layout(location = 1) in vec2 aTexCoord;       // tex coord
-layout(location = 2) in vec2 aCannonPosition; // offset per model
+layout(location = 2) in vec2 aCannonPos;      // offset per model
 layout(location = 3) in float aGridIndex;     // grid index(color) per model
 
 uniform mat4 uProjection;
 uniform vec2 uGridDimensions;
 uniform float uCannonAngle;
-uniform float uShipRotation;
+//uniform float uShipRotation;
 
 out vec2 vTexCoord;
 
@@ -27,12 +27,8 @@ void main() {
 
     float c = cos(uCannonAngle);
     float s = sin(uCannonAngle);
-    vec2 rotated =  mat2(c, s, -s, c) * aPos;// x gives power to x, then gives power to y
-    vec2 cannonModel = aCannonPosition + rotated;
+    vec2 rotatedLocal =  mat2(c, s, -s, c) * aPos; // x gives power to x, then gives power to y
+    vec2 cannonModel = rotatedLocal + aCannonPos;
 
-    c = cos(uShipRotation);
-    s = sin(uShipRotation);
-    vec2 shipRotated = mat2(c, s, -s, c) * cannonModel;
-
-    gl_Position = uProjection * vec4(shipRotated, 0.0, 1.0);
+    gl_Position = uProjection * vec4(cannonModel, 0.0, 1.0);
 }

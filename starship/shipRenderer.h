@@ -28,23 +28,12 @@ class ShipRenderer {
     GLuint hullShader, hullSettingsVBO, hullVAO, hullVBO, hullAtlasTexture, hullCrackAtlasTexture;
     GLuint hullProjectionLoc, hullAtlasLoc, hullAtlasCrackLoc, hullBorderWidthLoc, hullTimeLoc;
 
-    typedef struct {
-        glm::vec4 aColor;
-        glm::mat3x2 aTexCoord;
-        glm::mat4 aTransform;
-    } hullSettings_t;
-
     // cannon OpenGL stuff
     GLuint cannonShader, cannonVAO, cannonVBO, cannonPositionsVBO, cannonTexture;
-    GLuint cannonAngleLoc, cannonShipRotationLoc, cannonProjectionLoc, cannonTextureLoc, cannonGridDimensionsLoc;
+    GLuint cannonAngleLoc, cannonProjectionLoc, cannonTextureLoc, cannonGridDimensionsLoc;
     glm::vec2 cannonGridDimensions = glm::vec2(2.0, 2.0);
     static const int MAX_CANNONS = 256;
     int cannonCount = 0;
-
-    typedef struct {
-        glm::vec2 position;
-        float color;
-    } cannonStride;
 
     // bullet OpenGL stuff
     GLuint bulletShader, bulletVAO, bulletVBO, bulletAttributesVBO, bulletTexture;

@@ -7,7 +7,7 @@ extern glm::mat4 projection;  // access the global
 extern glm::mat4 projView;
 extern bool keys[256];
 extern int64_t startTimes[256];
-glm::mat4 shipModel;
+glm::mat4 shipPos;
 
 //texture(uCrackTex, vLocalUV).r;
 static GLuint compileShader(GLenum type, const char* src) {
@@ -21,59 +21,45 @@ Starship::Starship() { }
 Starship::~Starship() { }
 
 void Starship::updateCannonPositions() {
-    glm::vec2 cannonPositions[MAX_CANNONS]; // I think MAX_CANNON is redudant with MAX_CANNON_COUNT
-    float cannonColors[MAX_CANNONS];
-    cannonCount = 0;
+    std::vector<cannonStride_t> cannonStrides;
 
-    for (int i = 0; i < cells.size() && cannonCount < MAX_CANNONS; ++i) {
+    for (int i = 0; i < cells.size(); ++i) {
         if (cells[i].cellAlive) {
-            cannonPositions[cannonCount] = cells[i].middleOfTriangle;
+            cannonStride_t stride;
+            stride.color = cells[i].name;
+            stride.position = cells[i].middleOfTriangle;
 
-            // temporary..
-            if(cells[i].color == glm::vec4(1.0f, 0.5f, 0.2f, 1.0f)) { // orange
-                cannonColors[cannonCount] = 0;
-            } else if(cells[i].color == glm::vec4(0.2f, 0.6f, 1.0f, 1.0f)) { // blue
-                cannonColors[cannonCount] = 1;
-            } else if(cells[i].color == glm::vec4(0.2f, 1.0f, 0.2f, 1.0f)) { // green
-                cannonColors[cannonCount] = 2;
-            }
-    
-            cannonCount++;
+            cannonStrides.push_back(stride);
         }
     }
 
+    shipData.cannonStride = cannonStrides;
+
     shipData.configChanged = true;
-    shipData.cannonData.count = cannonCount;
-    memcpy(&shipData.cannonData.pos[0], &cannonPositions[0], cannonCount * sizeof(glm::vec2));
-    memcpy(&shipData.cannonData.colors[0], &cannonColors[0], cannonCount * sizeof(float));
+
+    cannonCount = cannonStrides.size();
 }
 
 void Starship::updateCellUniforms() {
-    std::vector<glm::mat4> transforms(cells.size());
-    std::vector<glm::mat3x2> texCoords(cells.size());
-    std::vector<glm::vec4> colors(cells.size());
-    
-    int aliveCount = 0;
+    std::vector<hullStride_t> hullStrides;
 
-    for(size_t i = 0; i < cells.size(); ++i) {
+    for(int i = 0; i < cells.size(); ++i) {
         if(cells[i].cellAlive) {
-            transforms[aliveCount] = cells[i].transform;
-            
-            texCoords[aliveCount] = glm::mat3x2(glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0),
+            hullStride_t stride;
+
+            stride.model = cells[i].transform;
+            stride.color = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
+            stride.texCoord = glm::mat3x2(glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0),
                                                 glm::vec2(cells[i].texCoords.u1, cells[i].texCoords.v1),
                                                 glm::vec2(cells[i].texCoords.u2, cells[i].texCoords.v2));
 
-            colors[aliveCount] = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
-
-            aliveCount += 1;
+            hullStrides.push_back(stride);
         }
     }
+
+    shipData.hullStride = hullStrides;
     
     shipData.configChanged = true;
-    shipData.cellHullData.count = aliveCount;
-    memcpy(shipData.cellHullData.model, &transforms[0], transforms.size() * sizeof(glm::mat4));
-    memcpy(shipData.cellHullData.texCoords, &texCoords[0], texCoords.size() * sizeof(glm::mat3x2));
-    memcpy(shipData.cellHullData.colors, &colors[0], colors.size() * sizeof(glm::vec4)); // when this works replace memcpy by just filling right field in struct
 }
 
 void Starship::init() { // function where we should init everything..
@@ -85,11 +71,10 @@ void Starship::init() { // function where we should init everything..
 }
 
 float easeInQuad(float number) {
-return number * number;
+    return number * number;
 }
 
- constexpr inline bool floatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon())
-{
+constexpr inline bool floatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon()) {
     return std::fabs(a - b) < epsilon;
 }
 
@@ -292,7 +277,7 @@ void Starship::draw() {
 
     glm::mat4 view = glm::translate(glm::mat4(1), glm::vec3(shipTranslate.x, shipTranslate.y, 0.0));
     projView = projection * view;
-    shipModel = glm::translate(glm::mat4(1.0), glm::vec3(-shipTranslate.x - directionalDrag.x, -shipTranslate.y - directionalDrag.y, 0.0));
+    shipPos = glm::translate(glm::mat4(1.0), glm::vec3(-shipTranslate.x - directionalDrag.x, -shipTranslate.y - directionalDrag.y, 0.0));
     
     shipMenu.render();
 }
@@ -384,9 +369,9 @@ int Starship::getSelectedCellId(glm::vec2 cursorPos) {
     // iterate through cells in order
     for(int i = 0; i < cells.size(); ++i) {
         // apply this cell transform to triangleVerts
-        glm::vec4 vert1 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[0]; // vertex, local translate, local rotate, shipModel translate, projView to origin 
-        glm::vec4 vert2 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[1];
-        glm::vec4 vert3 = projView * shipModel * shipRotation * cells[i].transform * triangleVerts[2];
+        glm::vec4 vert1 = projView * shipPos * shipRotation * cells[i].transform * triangleVerts[0]; // vertex, local translate, local rotate, shipPos translate, projView to origin 
+        glm::vec4 vert2 = projView * shipPos * shipRotation * cells[i].transform * triangleVerts[1];
+        glm::vec4 vert3 = projView * shipPos * shipRotation * cells[i].transform * triangleVerts[2];
 
         // if cursor is inside these triangleVerts, return id of cell
         if(isCursorInsideCell(cursorPos, vert1, vert2, vert3))
@@ -579,20 +564,20 @@ void Starship::shotBullet() {
     float dirY = cursorY;
     float cannonAngle = atan2f(dirY, dirX);
 
-    bulletData_t bullet;
+    bulletStride_t bullet;
     bullet.direction = glm::vec2(cos(cannonAngle), sin(cannonAngle));
     bullet.gridIndex = 0;
     bullet.startTime = emscripten_get_now() / 1000.0f;
     bullet.velocity = 0.2;
     
     for(int i = 0; i < cells.size(); ++i) {
+        // each cell that is alive can shot a new bullet when the user shots
         if(cells[i].cellAlive) {
-            bullet.shipTranslate = glm::vec2(shipModel[3][0], shipModel[3][1]);
+            bullet.shipTranslate = glm::vec2(shipPos[3][0], shipPos[3][1]);
             bullet.origin = cells[i].middleOfTriangle;
             bullet.shipRotation = currentRotation;
 
-            shipData.bulletData[shipData.bulletDataCount] = bullet;
-            shipData.bulletDataCount += 1;
+            shipData.bulletStride.push_back(bullet); // need to keep track of each bullet and when they were shot, so that we can remove them when they reach their maximum distance threshold
         }
     }
 

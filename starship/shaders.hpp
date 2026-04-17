@@ -12,24 +12,18 @@ constexpr float cellSize = 0.120;
 constexpr float originX = -(gridWidth*cellSize)/2.0;
 constexpr float originY = -(gridHeight*cellSize)/2.0; // maybe set these field from within starship class, into renderer? since its supposed to hold the truth of the cells layout, and the renderer renders
 
-// maybe should share this in .h file
-typedef struct {
-    float cannonRot;                        // dynamic each frame
-    glm::vec2 pivot;                        // static
-    glm::vec2 size;                         // static
-    glm::vec2 pos[MAX_CANNON_COUNT];        // static
-    float colors[MAX_CANNON_COUNT]; // should be an enum
-    int count = 0;
-} cannonData_t;
+struct hullStride_t {
+    glm::mat4 model; 
+    glm::vec4 color;  
+    glm::mat3x2 texCoord;   
+};
 
-typedef struct {
-    glm::mat4 model[MAX_CANNON_COUNT];       // static
-    glm::mat3x2 texCoords[MAX_CANNON_COUNT]; // static
-    glm::vec4 colors[MAX_CANNON_COUNT];      // static
-    int count = 0;
-} cellHullData_t;// I think these could be arrays of struct so that we jsut send array to gpu? needs to be packed at float
+struct cannonStride_t {
+    glm::vec2 position;
+    float color;  
+};
 
-typedef struct {
+struct bulletStride_t {
     glm::vec2 shipTranslate;
     glm::vec2 origin;
     glm::vec2 direction;
@@ -37,17 +31,18 @@ typedef struct {
     float gridIndex;
     float startTime;
     float shipRotation;
-} bulletData_t;
+};
 
-typedef struct {
+struct shipData_t {
     bool configChanged = false;
-    int shipID;                              // static
-    float shipRot;                           // dynamic each frame
-    cannonData_t cannonData;
-    cellHullData_t cellHullData;
-    bulletData_t bulletData[MAX_CANNON_COUNT * 50];
-    int bulletDataCount = 0;
-} shipData_t;
+    int shipID;                           
+    float shipRot;                        
+
+    // gpu data
+    std::vector<hullStride_t> hullStride;          
+    std::vector<cannonStride_t> cannonStride; 
+    std::vector<bulletStride_t> bulletStride; 
+};
 
 ////////////////////////////////////////////////////////
 

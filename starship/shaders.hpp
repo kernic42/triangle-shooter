@@ -46,6 +46,19 @@ struct shipData_t {
 
 ////////////////////////////////////////////////////////
 
+struct CellTexCoords {
+    float u0, v0;  // bottom-left
+    float u1, v1;  // bottom-right
+    float u2, v2;  // top-right
+    float pad0, pad1;  // padding to align to 32 bytes (std140)
+};
+
+enum AtlasSprite {
+    ATLAS_FIRE = 0,
+    ATLAS_ICE = 1,
+    ATLAS_RADIOACTIVE = 2,
+};
+
  enum CellCategory {
     CELL_ATTACK,
     CELL_DEFENSE,
@@ -102,17 +115,49 @@ enum CellName {
     CELL_NONE
 };
 
-struct CellTexCoords {
-    float u0, v0;  // bottom-left
-    float u1, v1;  // bottom-right
-    float u2, v2;  // top-right
-    float pad0, pad1;  // padding to align to 32 bytes (std140)
+struct DefenseData {
+    float regenRate;
+    float maxStrength;
 };
 
-enum AtlasSprite {
-    ATLAS_FIRE = 0,
-    ATLAS_ICE = 1,
-    ATLAS_RADIOACTIVE = 2,
+struct AttackData {
+    float fireRate;
+    float damage;
+    float projectileSpeed;
+};
+
+struct UtilityData {
+    float range;
+    int capacity;
+};
+
+struct JetData {
+    float thrust;
+    float energyEfficiency;
+};
+
+struct CustomData {
+    int customEffectID;
+};
+
+struct TriangleCell {
+    CellCategory category;
+    CellName name;
+    union {
+        DefenseData defense;
+        AttackData attack;
+        UtilityData utility;
+        JetData jet;
+        CustomData custom;
+    };
+    bool cellAlive;
+    int cellNumber;
+    glm::vec2 middleOfTriangle;
+    glm::mat4 transform;
+    float x, y;
+    CellTexCoords texCoords;
+    AtlasSprite spriteName;
+    glm::vec4 color;
 };
 
 // Shader with rotation matrix
@@ -276,6 +321,21 @@ inline std::string loadTextFile(const char* path) {
     return content;
 }
 
+inline GLuint compileShader(GLenum type, const char* source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, nullptr);
+    glCompileShader(shader);
+    
+    GLint success;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        char infoLog[512];
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+        printf("Shader compilation error: %s\n", infoLog);
+    }
+    return shader;
+}
+
 inline GLuint loadTexture(const char* path) {
     int width, height, channels;
     unsigned char* data = stbi_load(path, &width, &height, &channels, 4);  // force RGBA
@@ -354,4 +414,16 @@ inline GLuint loadTextureRepeat(const char* path) {
     
     printf("Loaded texture: %s (%dx%d)\n", path, width, height);
     return texture;
+}
+
+inline float easeInQuad(float number) {
+    return number * number;
+}
+
+inline bool floatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon()) {
+    return std::fabs(a - b) < epsilon;
+}
+
+inline bool sameSign(float a, float b) {
+    return (a > 0) == (b > 0);
 }

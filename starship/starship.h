@@ -14,51 +14,6 @@
 
 class Starship {
 public:
-    struct DefenseData {
-        float regenRate;
-        float maxStrength;
-    };
-
-    struct AttackData {
-        float fireRate;
-        float damage;
-        float projectileSpeed;
-    };
-
-    struct UtilityData {
-        float range;
-        int capacity;
-    };
-
-    struct JetData {
-        float thrust;
-        float energyEfficiency;
-    };
-
-    struct CustomData {
-        int customEffectID;
-    };
-
-    struct TriangleCell {
-        CellCategory category;
-        CellName name;
-        bool cellAlive;
-        int cellNumber;
-        glm::vec2 middleOfTriangle;
-        glm::mat4 transform;
-        float x, y;
-        CellTexCoords texCoords;
-        AtlasSprite spriteName;
-        glm::vec4 color;
-        union {
-            DefenseData defense;
-            AttackData attack;
-            UtilityData utility;
-            JetData jet;
-            CustomData custom;
-        };
-    };
-
     int f = 0;
     std::vector<TriangleCell> cells;
 
@@ -92,9 +47,6 @@ public:
     glm::vec2 shipTranslate = glm::vec2(0.0, 0.0);
     glm::vec2 translateSpeed = glm::vec2(0.0, 0.0);
 
-    static const int MAX_CANNONS = 256;
-    int cannonCount = 0;
-
     void draw();
     void init();
     Starship();
@@ -114,8 +66,8 @@ public:
     void initCellMiddlePoints();
     void initStarshipCells();
 
-    void updateCannonPositions();
-    void updateCellUniforms();
+    void updateCannons();
+    void updateHulls();
     void newAttackCell(CellName name, int cellNumber);
 
     void shotBullet();

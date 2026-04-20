@@ -48,25 +48,29 @@ class ShipRenderer {
 
     // init
     void setAspect(float width, float height);
+    void init();
 
     // OpenGL Cell Grid Hull Part
     void initGrid();
     void drawGrid(float rotation);
 
     // OpenGL Cells Hull Part               
-    void initCellRendering();
-    void renderCells(std::vector<float> shipsRotation);
-    void updateCellUniforms(shipData_t *ships, int shipCount);
+    void initHulls();
+    void renderHulls(std::vector<float> shipsRotation);
+    void updateHulls(shipData_t &shipData, std::vector<TriangleCell> &cells);
+    void updateHullsGpu(shipData_t *ships, int shipCount);
 
     // OpenGL Cannons Part
     void initCannons();
     void renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRotation);
-    void updateCannonPositions(shipData_t *ships, int shipCount);
+    void updateCannonsGpu(shipData_t *ships, int shipCount);
+    void updateCannons(shipData_t &shipData, std::vector<TriangleCell> &cells);
 
     // OpenGL Bullets Part
     void initBullets();
     void renderBullets();
     void updateBullets(shipData_t *ships, int shipCount);
+    void emitBullet(float rotation, shipData_t &shipData, std::vector<TriangleCell> &cells);
     
     // render part
     void render(shipData_t *ships, int count, glm::vec2 cursorPos); // we use ptr to put all data from ships structs in a same contiguous array, that can be passed with a single glDrawArraysInstanced call

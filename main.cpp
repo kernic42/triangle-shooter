@@ -146,21 +146,6 @@ EM_BOOL onKeyUp(int eventType, const EmscriptenKeyboardEvent* e, void* userData)
     return EM_FALSE;
 }
 
-GLuint compileShader(GLenum type, const char* source) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &source, nullptr);
-    glCompileShader(shader);
-    
-    GLint success;
-    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
-    if (!success) {
-        char infoLog[512];
-        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
-        printf("Shader compilation error: %s\n", infoLog);
-    }
-    return shader;
-}
-
 GLuint createProgram(const char* vertSrc, const char* fragSrc) {
     GLuint vertShader = compileShader(GL_VERTEX_SHADER, vertSrc);
     GLuint fragShader = compileShader(GL_FRAGMENT_SHADER, fragSrc);

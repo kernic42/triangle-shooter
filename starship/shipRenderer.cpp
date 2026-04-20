@@ -19,11 +19,11 @@ ShipRenderer::~ShipRenderer() {
 
 }
 
-static GLuint compileShader(GLenum type, const char* src) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, nullptr);
-    glCompileShader(shader);
-    return shader;
+void ShipRenderer::init() {
+    this->initBullets();
+    this->initGrid();
+    this->initCannons();
+    this->initHulls();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -108,7 +108,7 @@ void ShipRenderer::drawGrid(float rotation) {
 /////////                        OpenGL Cells Hull Part                                ////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
-void ShipRenderer::initCellRendering() {
+void ShipRenderer::initHulls() {
     // Compile shader
     GLuint vert = compileShader(GL_VERTEX_SHADER, cellVertexShader2);
     GLuint frag = compileShader(GL_FRAGMENT_SHADER, cellFragmentShader);
@@ -186,7 +186,7 @@ void ShipRenderer::initCellRendering() {
     printf("crack texture ID: %u\n", hullCrackAtlasTexture);
 }
 
-void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
+void ShipRenderer::renderHulls(std::vector<float> shipsRotation) {
     if (cannonCount == 0) return;
 
     float borderWidth = 0.012;
@@ -216,7 +216,26 @@ void ShipRenderer::renderCells(std::vector<float> shipsRotation) {
     glBindVertexArray(0);
 }
 
-void ShipRenderer::updateCellUniforms(shipData_t *ships, int shipCount) {
+void ShipRenderer::updateHulls(shipData_t &shipData, std::vector<TriangleCell> &cells) {
+    std::vector<hullStride_t> strides;
+
+    for(int i = 0; i < cells.size(); ++i) {
+        if(cells[i].cellAlive) {
+            hullStride_t stride;
+            stride.model = cells[i].transform;
+            stride.color = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
+            stride.texCoord = glm::mat3x2(glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0),
+                                                glm::vec2(cells[i].texCoords.u1, cells[i].texCoords.v1),
+                                                glm::vec2(cells[i].texCoords.u2, cells[i].texCoords.v2));
+            strides.push_back(stride);
+        }
+    }
+
+    shipData.configChanged = true;
+    shipData.hullStride = strides;
+}
+
+void ShipRenderer::updateHullsGpu(shipData_t *ships, int shipCount) {
     // need to iterate through all ships and copy their data into contiguous vector to send to gpu
     std::vector<hullStride_t> strides;
 
@@ -324,8 +343,23 @@ void ShipRenderer::initCannons() {
     cannonTexture = loadTextureBlurry("cannon.png");
 }
 
-void ShipRenderer::updateCannonPositions(shipData_t *ships, int shipCount) {
-    // iterate through cannons and put data in contiguous array
+void ShipRenderer::updateCannons(shipData_t &shipData, std::vector<TriangleCell> &cells) {
+    std::vector<cannonStride_t> strides;
+
+    for (int i = 0; i < cells.size(); ++i) {
+        if (cells[i].cellAlive) {
+            cannonStride_t stride;
+            stride.color = cells[i].name;
+            stride.position = cells[i].middleOfTriangle;
+            strides.push_back(stride);
+        }
+    }
+
+    shipData.configChanged = true;
+    shipData.cannonStride = strides;
+}
+
+void ShipRenderer::updateCannonsGpu(shipData_t *ships, int shipCount) {
     std::vector<cannonStride_t> strides;
 
     for(int i = 0; i < shipCount; ++i) {
@@ -499,6 +533,26 @@ void ShipRenderer::updateBullets(shipData_t *ships, int shipCount) {
     bulletCount = strides.size();
 }
 
+void ShipRenderer::emitBullet(float cannonAngle, shipData_t &shipData, std::vector<TriangleCell> &cells) {
+    bulletStride_t bullet;
+    bullet.direction = glm::vec2(cos(cannonAngle), sin(cannonAngle));
+    bullet.gridIndex = 0;
+    bullet.startTime = emscripten_get_now() / 1000.0f;
+    bullet.velocity = 0.2;
+    
+    for(int i = 0; i < cells.size(); ++i) {
+        // each cell that is alive can shot a new bullet when the user shots
+        if(cells[i].cellAlive) {
+            bullet.shipTranslate = glm::vec2(shipPos[3][0], shipPos[3][1]);
+            bullet.origin = cells[i].middleOfTriangle;
+            bullet.shipRotation = shipData.shipRot;
+            shipData.bulletStride.push_back(bullet);
+        }
+    }
+
+    shipData.configChanged = true;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 /////////                             OpenGL Render Part                               ////////
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -517,8 +571,8 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
     }
 
     if(anyConfigChanged) { // maybe just update the config for the thing that changed..
-        updateCannonPositions(ships, count);
-        updateCellUniforms(ships, count);
+        updateCannonsGpu(ships, count);
+        updateHullsGpu(ships, count);
         updateBullets(ships, count);
         printf("ship config updated\n");
     }
@@ -534,7 +588,7 @@ void ShipRenderer::render(shipData_t *ships, int count, glm::vec2 cursorPos) {
 
     // render cannon with gathered data from all the ship structs
     drawGrid(shipsRotation[0]); // ship is probably always stored as ship 0 and never gets destroyed, maybe add a property field for main ship
-    renderCells(shipsRotation);
+    renderHulls(shipsRotation);
     renderCannons(cursorPos, shipsRotation);
     renderBullets();
 }

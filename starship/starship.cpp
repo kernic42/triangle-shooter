@@ -9,77 +9,28 @@ extern bool keys[256];
 extern int64_t startTimes[256];
 glm::mat4 shipPos;
 
-//texture(uCrackTex, vLocalUV).r;
-static GLuint compileShader(GLenum type, const char* src) {
-    GLuint shader = glCreateShader(type);
-    glShaderSource(shader, 1, &src, nullptr);
-    glCompileShader(shader);
-    return shader;
-}
-
 Starship::Starship() { }
 Starship::~Starship() { }
 
-void Starship::updateCannonPositions() {
-    std::vector<cannonStride_t> cannonStrides;
+void Starship::updateCannons() {
+    shipRenderer.updateCannons(shipData, cells); // maybe it'd be better if shipData didn't hold any gpu data, and if it was entirely held in the renderer for each ship
+}                                                // for example: when a ship is updated, the renderer detects it and refill its gpu structs from shipData and cells before next render
 
-    for (int i = 0; i < cells.size(); ++i) {
-        if (cells[i].cellAlive) {
-            cannonStride_t stride;
-            stride.color = cells[i].name;
-            stride.position = cells[i].middleOfTriangle;
-
-            cannonStrides.push_back(stride);
-        }
-    }
-
-    shipData.cannonStride = cannonStrides;
-
-    shipData.configChanged = true;
-
-    cannonCount = cannonStrides.size();
+void Starship::updateHulls() {
+    shipRenderer.updateHulls(shipData, cells);
 }
 
-void Starship::updateCellUniforms() {
-    std::vector<hullStride_t> hullStrides;
+void Starship::shotBullet() {
+    float dirX = cursorX * aspect; // prob needs to be a property inside ship struct instead
+    float dirY = cursorY;
+    float cannonAngle = atan2f(dirY, dirX);
 
-    for(int i = 0; i < cells.size(); ++i) {
-        if(cells[i].cellAlive) {
-            hullStride_t stride;
-
-            stride.model = cells[i].transform;
-            stride.color = glm::vec4(cells[i].color.r, cells[i].color.g, cells[i].color.b, cells[i].color.a);
-            stride.texCoord = glm::mat3x2(glm::vec2(cells[i].texCoords.u0, cells[i].texCoords.v0),
-                                                glm::vec2(cells[i].texCoords.u1, cells[i].texCoords.v1),
-                                                glm::vec2(cells[i].texCoords.u2, cells[i].texCoords.v2));
-
-            hullStrides.push_back(stride);
-        }
-    }
-
-    shipData.hullStride = hullStrides;
-    
-    shipData.configChanged = true;
+    shipRenderer.emitBullet(cannonAngle, shipData, cells);
 }
 
-void Starship::init() { // function where we should init everything..
-    shipRenderer.initBullets();
-    shipRenderer.initGrid();
-    shipRenderer.initCannons();
-    shipRenderer.initCellRendering();
+void Starship::init() {
+    shipRenderer.init();
     shipMenu.init();
-}
-
-float easeInQuad(float number) {
-    return number * number;
-}
-
-constexpr inline bool floatsEqual(float a, float b, float epsilon = std::numeric_limits<float>::epsilon()) {
-    return std::fabs(a - b) < epsilon;
-}
-
-bool sameSign(float a, float b) {
-    return (a > 0) == (b > 0);
 }
 
 bool beenTrueAtLeastMs(double &lastMsTrue, bool isTrue, int64_t atLeastDuration) {
@@ -535,7 +486,7 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
         newCell.texCoords = getRandomAtlasCoords(ATLAS_FIRE, cellNumber);
         newCell.color = {1.0f, 0.5f, 0.2f, 1.0f};  // orange
     }
-    else if (name == CellName::CELL_ICE) {
+    else if(name == CellName::CELL_ICE) {
         newCell.spriteName = ATLAS_ICE;
         newCell.texCoords = getRandomAtlasCoords(ATLAS_ICE, cellNumber);
         newCell.color = {0.2f, 0.6f, 1.0f, 1.0f};  // blue
@@ -555,33 +506,8 @@ void Starship::newAttackCell(CellName name, int cellNumber) {
     }
 
     // Update uniforms after adding/replacing cell
-    updateCellUniforms();
-    updateCannonPositions();
-}
-
-void Starship::shotBullet() {
-    float dirX = cursorX * aspect; // prob needs to be a property inside ship struct instead
-    float dirY = cursorY;
-    float cannonAngle = atan2f(dirY, dirX);
-
-    bulletStride_t bullet;
-    bullet.direction = glm::vec2(cos(cannonAngle), sin(cannonAngle));
-    bullet.gridIndex = 0;
-    bullet.startTime = emscripten_get_now() / 1000.0f;
-    bullet.velocity = 0.2;
-    
-    for(int i = 0; i < cells.size(); ++i) {
-        // each cell that is alive can shot a new bullet when the user shots
-        if(cells[i].cellAlive) {
-            bullet.shipTranslate = glm::vec2(shipPos[3][0], shipPos[3][1]);
-            bullet.origin = cells[i].middleOfTriangle;
-            bullet.shipRotation = currentRotation;
-
-            shipData.bulletStride.push_back(bullet); // need to keep track of each bullet and when they were shot, so that we can remove them when they reach their maximum distance threshold
-        }
-    }
-
-    shipData.configChanged = true;
+    updateHulls();
+    updateCannons();
 }
 
 void Starship::onMouseDown(int button, float x, float y) {

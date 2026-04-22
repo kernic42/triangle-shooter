@@ -37,11 +37,13 @@ class ShipRenderer {
 
     // bullet OpenGL stuff
     GLuint bulletShader, bulletVAO, bulletVBO, bulletAttributesVBO, bulletTexture;
-    GLuint bulletTimeLoc, bulletGridDimensionsLoc, bulletProjectionLoc, bulletTextureLoc;
+    GLuint bulletTimeLoc, bulletProjviewLoc, bulletSizeLoc, bulletLifespanLoc, bulletExplodeDistLoc, bulletBoomZoneLoc;
     glm::vec2 bulletGridDimensions = glm::vec2(1.0, 1.0);
     int bulletCount = 0;
 
     public:
+
+    int64_t startTime = emscripten_get_now();
 
     ShipRenderer();
     ~ShipRenderer();

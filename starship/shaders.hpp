@@ -33,6 +33,14 @@ struct bulletStride_t {
     float shipRotation;
 };
 
+struct sparkBulletStride {
+    glm::vec2 iCenter;
+    glm::vec2 iVelocity;
+    float iSeed;
+    float iType;
+    float iSpawnTime;
+};
+
 struct shipData_t {
     bool configChanged = false;
     int shipID;                           
@@ -41,7 +49,7 @@ struct shipData_t {
     // gpu data
     std::vector<hullStride_t> hullStride;          
     std::vector<cannonStride_t> cannonStride; 
-    std::vector<bulletStride_t> bulletStride; 
+    std::vector<sparkBulletStride> bulletStride; 
 };
 
 ////////////////////////////////////////////////////////

@@ -1,17 +1,16 @@
 #version 300 es
 precision mediump float;
 
-layout(location = 0) in vec2 aQuad;       // vertex
-layout(location = 1) in vec2 iCenter;     // center        // needs to be rotated by matrix following shipRot
-layout(location = 2) in vec2 iVelocity;   // direction     // needs to take into account offset between shipRot and cannonRot
-layout(location = 3) in float iSeed;      // random seed
-layout(location = 4) in float iType;      // orange blue or green
-layout(location = 5) in float iSpawnTime; // when bullet was created
-
-// to be able to use this with center and direction, the cpu needs to apply the shipRot to cannonRot and transform into direction for iVelocity
+layout(location = 0) in vec2 aQuad;
+layout(location = 1) in vec2 iCenter;
+layout(location = 2) in vec2 iVelocity;
+layout(location = 3) in float iSeed;
+layout(location = 4) in float iType;
+layout(location = 5) in float iSpawnTime;
 
 uniform float uTime;
-uniform float uAspect;
+//uniform float uAspect;
+uniform mat4 uProjview;
 uniform float uSize;
 uniform float uLifespan;
 uniform float uExplodeDist;
@@ -49,7 +48,7 @@ void main() {
     float peak = 0.3 + fract(iSeed * 7.13) * 0.3;
     float rampUp = smoothstep(0.0, peak, lifeFrac);
     float rampDown = 1.0 - smoothstep(peak, 1.0, lifeFrac);
-    vLife = max(mix(0.85, 1.0, rampUp) * rampDown, 0.85);
+    vLife = 1.0;//max(mix(0.85, 1.0, rampUp) * rampDown, 0.85);
 
     vec2 center = iCenter + iVelocity * age;
     vec2 dir = speed > 0.001 ? iVelocity / speed : vec2(1.0, 0.0);
@@ -57,6 +56,5 @@ void main() {
 
     float s = 0.012 * uSize;
     vec2 world = center + dir * aQuad.x * s + perp * aQuad.y * s;
-    world.x /= uAspect;
-    gl_Position = vec4(world, 0.0, 1.0);
+    gl_Position = uProjview * vec4(world, 0.0, 1.0);
 }

@@ -404,10 +404,10 @@ void ShipRenderer::renderCannons(glm::vec2 cursorPos, std::vector<float> shipsRo
     glBindVertexArray(0);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////
-/////////                            OpenGL Bullets Part                               ////////
-///////////////////////////////////////////////////////////////////////////////////////////////
-
+///////////////////////////////////////////////////////////////////////////////////////////
+/////////                            OpenGL Bullets                                ////////
+///////////////////////////////////////////////////////////////////////////////////////////
+/*
 void ShipRenderer::initBullets() {                                 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);                 
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);               
@@ -546,6 +546,183 @@ void ShipRenderer::emitBullet(float cannonAngle, shipData_t &shipData, std::vect
             bullet.shipTranslate = glm::vec2(shipPos[3][0], shipPos[3][1]);
             bullet.origin = cells[i].middleOfTriangle;
             bullet.shipRotation = shipData.shipRot;
+            shipData.bulletStride.push_back(bullet);
+        }
+    }
+
+    shipData.configChanged = true;
+}*/
+
+///////////////////////////////////////////////////////////////////////////////////////////
+/////////                            OpenGL Bullets 2                              ////////
+///////////////////////////////////////////////////////////////////////////////////////////
+
+float bulletSize = 0.555f;
+float explodeDistance = 7.0;
+float bulletSpeed = 0.2;
+float bulletBoomZone = 0.7;
+
+void ShipRenderer::initBullets() {                                 
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);                 
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);               
+    std::string cannonVertShader = loadTextFile("shaders/sparkBullet.vert");
+    std::string cannonFragShader = loadTextFile("shaders/sparkBullet.frag");
+    const char* cannonFragShaderChar = cannonFragShader.c_str();
+    const char* cannonVertShaderChar = cannonVertShader.c_str();
+    glShaderSource(vs, 1, &cannonVertShaderChar, nullptr);         
+    glShaderSource(fs, 1, &cannonFragShaderChar, nullptr);        
+    glCompileShader(vs);
+    glCompileShader(fs);
+    bulletShader = glCreateProgram();
+    glAttachShader(bulletShader, vs);
+    glAttachShader(bulletShader, fs);
+    glLinkProgram(bulletShader);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+
+    float s = 1.0f;  // adjust to taste // literally spanning entire screen...
+    float quad[] = {
+        // triangle 1
+        -s, -s,  0.0f, 0.0f,
+        s, -s,  1.0f, 0.0f,
+        s,  s,  1.0f, 1.0f,
+        // triangle 2
+        -s, -s,  0.0f, 0.0f,
+        s,  s,  1.0f, 1.0f,
+        -s,  s,  0.0f, 1.0f
+    };
+
+    // get uniform locations
+    //bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
+    //bulletGridDimensionsLoc = glGetUniformLocation(bulletShader, "uGridDimensions");
+    //bulletProjectionLoc = glGetUniformLocation(bulletShader, "uProjection");
+    //bulletTextureLoc = glGetUniformLocation(bulletShader, "uTexture");
+
+    bulletTimeLoc = glGetUniformLocation(bulletShader, "uTime");
+    //bulletAspectLoc = glGetUniformLocation(bulletShader, "uAspect");
+    bulletProjviewLoc = glGetUniformLocation(bulletShader, "uProjview");
+    bulletSizeLoc = glGetUniformLocation(bulletShader, "uSize");
+    bulletLifespanLoc = glGetUniformLocation(bulletShader, "uLifespan");
+    bulletExplodeDistLoc = glGetUniformLocation(bulletShader, "uExplodeDist");
+    bulletBoomZoneLoc = glGetUniformLocation(bulletShader, "uBoomZone");
+
+    glUseProgram(bulletShader);
+
+    float lifespan = std::max(explodeDistance / std::max(bulletSpeed, 0.05f) + 0.5, 3.0);
+
+    //glUniform1f(bulletAspectLoc, aspect);
+    glUniform1f(bulletSizeLoc, bulletSize);
+    glUniform1f(bulletExplodeDistLoc, explodeDistance);
+    glUniform1f(bulletBoomZoneLoc, bulletBoomZone);
+    glUniform1f(bulletLifespanLoc, lifespan);
+
+    // upload once
+    //glUniform2fv(bulletGridDimensionsLoc, 1, &bulletGridDimensions[0]);
+
+    glGenVertexArrays(1, &bulletVAO);
+    glBindVertexArray(bulletVAO);
+
+    glGenBuffers(1, &bulletVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, bulletVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quad), quad, GL_STATIC_DRAW);
+
+    //////////////////////////////////
+    //     static data(quad, uv)    //
+    //////////////////////////////////
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+    //glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2*sizeof(float)));
+    //glEnableVertexAttribArray(1);
+    
+    /////////////////////////////
+    //      dynamic data       //
+    /////////////////////////////
+    glGenBuffers(1, &bulletAttributesVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO);
+
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(sparkBulletStride), (void*)offsetof(sparkBulletStride, iCenter));
+    glVertexAttribDivisor(1, 1);
+    glEnableVertexAttribArray(1);
+
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(sparkBulletStride), (void*)offsetof(sparkBulletStride, iVelocity));
+    glVertexAttribDivisor(2, 1);
+    glEnableVertexAttribArray(2);
+
+    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(sparkBulletStride), (void*)offsetof(sparkBulletStride, iSeed));
+    glVertexAttribDivisor(3, 1);
+    glEnableVertexAttribArray(3);
+
+    glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(sparkBulletStride), (void*)offsetof(sparkBulletStride, iType));
+    glVertexAttribDivisor(4, 1);
+    glEnableVertexAttribArray(4);
+
+    glVertexAttribPointer(5, 1, GL_FLOAT, GL_FALSE, sizeof(sparkBulletStride), (void*)offsetof(sparkBulletStride, iSpawnTime));
+    glVertexAttribDivisor(5, 1);
+    glEnableVertexAttribArray(5);
+
+    glBindVertexArray(0);
+
+    bulletTexture = loadTexture("bullet.png");
+}
+
+void ShipRenderer::renderBullets() {
+    glUseProgram(bulletShader);
+
+    //glUniformMatrix4fv(bulletProjectionLoc, 1, GL_FALSE,  glm::value_ptr(projView));
+    glUniform1f(bulletTimeLoc, float(emscripten_get_now()-startTime) / 1000.0f);
+    glUniformMatrix4fv(bulletProjviewLoc, 1, GL_FALSE, &projView[0][0]);
+    printf("(emscripten_get_now()-startTime) / 1000.0f: %f\n", (emscripten_get_now()-startTime) / 1000.0);
+
+    //glActiveTexture(GL_TEXTURE0);
+    //glBindTexture(GL_TEXTURE_2D, bulletTexture);
+    //glUniform1i(bulletTextureLoc, 0);
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+    glBindVertexArray(bulletVAO);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 6, bulletCount);
+
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindVertexArray(0);
+}
+
+void ShipRenderer::updateBullets(shipData_t *ships, int shipCount) {
+    std::vector<sparkBulletStride> strides;
+
+    for(int i = 0; i < shipCount; ++i) {
+        shipData_t &ship = ships[i];
+
+        strides.insert(strides.end(), ship.bulletStride.begin(), ship.bulletStride.end());
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, bulletAttributesVBO); 
+    glBufferData(GL_ARRAY_BUFFER, strides.size() * sizeof(sparkBulletStride), &strides[0], GL_STATIC_DRAW);
+
+    bulletCount = strides.size();
+
+    printf("bulletCount: %d", bulletCount);
+}
+
+void ShipRenderer::emitBullet(float cannonAngle, shipData_t &shipData, std::vector<TriangleCell> &cells) {
+    sparkBulletStride bullet;
+    bullet.iSpawnTime = float(emscripten_get_now()-startTime) / 1000.0f;
+    bullet.iVelocity = bulletSpeed * glm::vec2(cos(cannonAngle), sin(cannonAngle));
+    
+    for(int i = 0; i < cells.size(); ++i) {
+        // each cell that is alive can shot a new bullet when the user shots
+        if(cells[i].cellAlive) {
+            bullet.iSeed = rand() / RAND_MAX;
+            //bullet.shipTranslate = glm::vec2(shipPos[3][0], shipPos[3][1]);
+            glm::mat2 rot = glm::mat2(cos(shipData.shipRot), sin(shipData.shipRot),
+                                       -sin(shipData.shipRot), cos(shipData.shipRot));
+
+            bullet.iCenter = rot * cells[i].middleOfTriangle + glm::vec2(shipPos[3][0], shipPos[3][1]);
+            //bullet.shipRotation = shipData.shipRot;
+            if(cells[i].name == CELL_FIRE) bullet.iType = 0.0f;
+            else if(cells[i].name == CELL_ICE) bullet.iType = 1.0f;
+            else if(cells[i].name == CELL_RADIOACTIVE) bullet.iType = 1.5f;
+
             shipData.bulletStride.push_back(bullet);
         }
     }
